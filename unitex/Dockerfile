@@ -5,7 +5,7 @@ FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0" \
+    TORCH_CUDA_ARCH_LIST="9.0" \
     FORCE_CUDA=1 \
     HF_HOME=/weights/hf_cache
 

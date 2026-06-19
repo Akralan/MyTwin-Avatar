@@ -4,7 +4,9 @@ FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0" \
+    # H100 = sm_90 uniquement -> compilation CUDA bien plus rapide
+    TORCH_CUDA_ARCH_LIST="9.0" \
+    TCNN_CUDA_ARCHITECTURES="90" \
     # Le cache HuggingFace pointe vers le volume monté -> pas de re-download au redémarrage
     HF_HOME=/weights/hf_cache
 
@@ -26,13 +28,18 @@ RUN pip install torch==2.0.0 torchvision==0.15.1 \
 WORKDIR /app
 RUN git clone --depth 1 https://github.com/3DTopia/GeneMAN.git
 WORKDIR /app/GeneMAN
-# NOTE : si requirements.txt entre en conflit avec la version de torch ci-dessus,
-# c'est ici qu'il faudra ajuster (pin de versions).
-RUN pip install -r requirements.txt || \
-    (echo ">>> requirements.txt a échoué, à ajuster manuellement" && exit 1)
 
-# Outil de téléchargement des poids + serveur API
-RUN pip install "huggingface_hub[cli]" fastapi "uvicorn[standard]" python-multipart
+# Plusieurs paquets (nerfacc, tiny-cuda-nn, nvdiffrast, envlight, pysdf, PyMCubes)
+# importent torch/numpy DANS leur setup.py -> incompatible avec l'isolation de build
+# de pip (env de build sans torch => "No module named 'torch'").
+# Solution : pré-installer les deps de build puis installer SANS isolation
+# (torch est déjà présent dans l'image).
+RUN pip install ninja Cython pybind11 "numpy==1.26.4"
+RUN pip install --no-build-isolation -r requirements.txt
+
+# Serveur API : on réutilise fastapi (0.88) et huggingface_hub (0.21.4) déjà
+# épinglés par GeneMAN ; on ajoute juste uvicorn + multipart + extras CLI.
+RUN pip install "huggingface_hub[cli]==0.21.4" "uvicorn[standard]" python-multipart
 
 COPY api.py /app/api.py
 COPY run_geneman.sh /app/run_geneman.sh
