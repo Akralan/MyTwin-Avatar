@@ -1,0 +1,6 @@
+# Force LF sur les fichiers exécutés sur Linux (CRLF casserait les scripts shell)
+*.sh        text eol=lf
+entrypoint* text eol=lf
+Dockerfile  text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf

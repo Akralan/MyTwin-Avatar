@@ -1,0 +1,52 @@
+# MyTwin Avatar POC — orchestration des 2 modèles GPU
+#
+# Sur l'instance Scaleway :
+#   docker compose pull      # récupère les images pré-buildées depuis GHCR
+#   docker compose up -d     # démarre, télécharge les poids au 1er lancement
+#
+# Pour builder localement au lieu de pull : décommenter les blocs "build".
+
+services:
+  geneman:
+    image: ${REGISTRY:-ghcr.io/CHANGE_ME}/mytwin-geneman:${TAG:-latest}
+    # build: ./geneman
+    container_name: geneman
+    env_file: .env
+    ports:
+      - "8001:8000"          # API GeneMAN -> http://<IP_INSTANCE>:8001
+    volumes:
+      - geneman_weights:/weights
+      - ./outputs/geneman:/app/GeneMAN/outputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: "16gb"
+    restart: unless-stopped
+
+  unitex:
+    image: ${REGISTRY:-ghcr.io/CHANGE_ME}/mytwin-unitex:${TAG:-latest}
+    # build: ./unitex
+    container_name: unitex
+    env_file: .env
+    ports:
+      - "8002:8000"          # API UniTEX -> http://<IP_INSTANCE>:8002
+    volumes:
+      - unitex_weights:/weights
+      - ./outputs/unitex:/app/UniTEX/outputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: "16gb"
+    restart: unless-stopped
+
+volumes:
+  geneman_weights:
+  unitex_weights:

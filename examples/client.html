@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--
+  Exemple de client : envoie une image -> GeneMAN -> affiche le mesh "sans texture",
+  puis envoie mesh+image -> UniTEX -> affiche le mesh "avec texture".
+  Sert de modèle à intégrer dans ton app web locale.
+  Ouvre simplement ce fichier dans un navigateur (ou sers-le en local).
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>MyTwin — GeneMAN + UniTEX</title>
+  <script type="module"
+    src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    .row { display: flex; gap: 24px; flex-wrap: wrap; }
+    model-viewer { width: 420px; height: 420px; background: #f2f2f2; border-radius: 8px; }
+    #log { white-space: pre-wrap; color: #555; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>MyTwin Avatar — reconstruction + texturing</h1>
+
+  <!-- ⚠️ Remplace par l'IP publique de ton instance Scaleway -->
+  <p>API : <input id="host" value="http://127.0.0.1" size="30"></p>
+  <input type="file" id="file" accept="image/*">
+  <button onclick="run()">Générer</button>
+  <div id="log"></div>
+
+  <div class="row">
+    <div><h3>Sans texture (GeneMAN)</h3><model-viewer id="mvRaw" camera-controls auto-rotate></model-viewer></div>
+    <div><h3>Avec texture (UniTEX)</h3><model-viewer id="mvTex" camera-controls auto-rotate></model-viewer></div>
+  </div>
+
+<script>
+const GENEMAN = () => host.value + ":8001";
+const UNITEX  = () => host.value + ":8002";
+const log = (m) => document.getElementById("log").textContent += m + "\n";
+
+// Poll un job jusqu'à done/error, renvoie le Blob du mesh résultat.
+async function waitJob(base, jobId) {
+  while (true) {
+    const s = await (await fetch(`${base}/jobs/${jobId}`)).json();
+    log(`  ${jobId.slice(0,8)} → ${s.status}`);
+    if (s.status === "done")  return await (await fetch(base + s.result_url)).blob();
+    if (s.status === "error") throw new Error(s.error);
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}
+
+async function run() {
+  const f = document.getElementById("file").files[0];
+  if (!f) return alert("Choisis une image");
+
+  // 1) GeneMAN : image -> mesh géométrie
+  log("GeneMAN : reconstruction…");
+  let fd = new FormData(); fd.append("image", f);
+  const g = await (await fetch(`${GENEMAN()}/reconstruct`, {method:"POST", body:fd})).json();
+  const rawMesh = await waitJob(GENEMAN(), g.job_id);
+  document.getElementById("mvRaw").src = URL.createObjectURL(rawMesh);
+  log("✓ mesh sans texture affiché");
+
+  // 2) UniTEX : image + mesh -> mesh texturé
+  log("UniTEX : texturing…");
+  fd = new FormData();
+  fd.append("image", f);
+  fd.append("mesh", new File([rawMesh], "mesh.glb"));
+  const u = await (await fetch(`${UNITEX()}/texture`, {method:"POST", body:fd})).json();
+  const texMesh = await waitJob(UNITEX(), u.job_id);
+  document.getElementById("mvTex").src = URL.createObjectURL(texMesh);
+  log("✓ mesh texturé affiché");
+}
+const host = document.getElementById("host");
+</script>
+</body>
+</html>
