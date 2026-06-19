@@ -37,8 +37,7 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-echo "==> Récupération et démarrage des modèles"
-docker compose pull
-docker compose up -d
+echo "==> Build des images (long la 1ʳᵉ fois : compilations CUDA) puis démarrage"
+docker compose up -d --build
 
 echo "==> Terminé. Suivi des logs :  docker compose logs -f"

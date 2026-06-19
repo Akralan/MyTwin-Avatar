@@ -1,15 +1,17 @@
 # MyTwin Avatar POC — orchestration des 2 modèles GPU
 #
-# Sur l'instance Scaleway :
-#   docker compose pull      # récupère les images pré-buildées depuis GHCR
-#   docker compose up -d     # démarre, télécharge les poids au 1er lancement
+# Sur l'instance Scaleway (build une seule fois, sur place) :
+#   docker compose up -d --build   # build les images puis démarre
 #
-# Pour builder localement au lieu de pull : décommenter les blocs "build".
+# Builds suivants (sans recompiler) :
+#   docker compose up -d
+#
+# Option registry (pour éviter de rebuild sur une NOUVELLE instance) : voir README.
 
 services:
   geneman:
-    image: ${REGISTRY:-ghcr.io/CHANGE_ME}/mytwin-geneman:${TAG:-latest}
-    # build: ./geneman
+    build: ./geneman
+    image: mytwin-geneman:local
     container_name: geneman
     env_file: .env
     ports:
@@ -28,8 +30,8 @@ services:
     restart: unless-stopped
 
   unitex:
-    image: ${REGISTRY:-ghcr.io/CHANGE_ME}/mytwin-unitex:${TAG:-latest}
-    # build: ./unitex
+    build: ./unitex
+    image: mytwin-unitex:local
     container_name: unitex
     env_file: .env
     ports:

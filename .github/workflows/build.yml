@@ -1,13 +1,14 @@
-name: Build & push images
+name: Build & push images (optionnel)
 
-# Build des 2 images et push sur GHCR (ghcr.io/<owner>/mytwin-geneman & -unitex).
-# L'instance Scaleway n'a plus qu'à faire `docker compose pull`.
+# OPTIONNEL — par défaut on build directement sur l'instance Scaleway.
+# Ce workflow ne sert que si tu veux pré-builder vers GHCR (éviter de recompiler
+# sur une NOUVELLE instance). Déclenchement MANUEL uniquement (onglet Actions),
+# ou sur tag de version.
 
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: read

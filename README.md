@@ -15,29 +15,32 @@ rien d'autre à faire.
 ## Architecture
 
 ```
-push GitHub ──> GitHub Actions ──> build 2 images ──> GHCR (registry)
-                                                          │
-instance Scaleway ── git clone ── docker compose pull ────┘ ── up -d
+instance Scaleway ── git clone ── docker compose up -d --build
                                        │
+                                       ├─ build des 2 images sur place (1 seule fois)
                                        └─ poids téléchargés depuis HuggingFace au 1er run
                                           (cachés dans un volume -> 1 seule fois)
 ```
 
-## Mise en place (une fois)
+> Option (non utilisée par défaut) : pré-builder vers GHCR via GitHub Actions pour
+> éviter de recompiler sur une *nouvelle* instance — voir la fin du README.
 
-1. **Pousser ce repo sur GitHub** → le workflow `.github/workflows/build.yml`
-   construit et publie les images sur `ghcr.io/<toi>/mytwin-geneman` & `-unitex`.
-2. Rendre les packages GHCR accessibles (ou garder privés + login sur l'instance).
-3. Sur les pages HuggingFace des modèles *gated*, **accepter les licences** avec ton compte.
+## Déploiement sur l'instance Scaleway (chemin par défaut)
 
-## Déploiement sur l'instance Scaleway
+Les images sont **buildées directement sur l'instance**, une seule fois.
 
 ```bash
-git clone https://github.com/<toi>/mytwin-avatar-poc.git
-cd mytwin-avatar-poc
-cp .env.example .env && nano .env        # renseigner HF_TOKEN + REGISTRY
-bash scripts/bootstrap_instance.sh       # installe Docker+toolkit GPU, pull, up
+git clone https://github.com/Akralan/MyTwin-Avatar.git
+cd MyTwin-Avatar
+cp .env.example .env && nano .env        # renseigner HF_TOKEN
+bash scripts/bootstrap_instance.sh       # Docker + toolkit GPU, puis build + up
 ```
+
+> Sur les pages HuggingFace des modèles *gated*, **accepte les licences** avec ton
+> compte avant le 1er démarrage (sinon le téléchargement des poids échoue).
+
+> ⏱️ Le 1ʳᵉ `up --build` est **long** (compilations CUDA : kaolin, nvdiffrast,
+> slangtorch). Les démarrages suivants réutilisent l'image (`docker compose up -d`).
 
 Chaque modèle expose alors une **API HTTP** :
 
@@ -86,20 +89,26 @@ dans **`examples/client.html`** — ouvre-le dans un navigateur pour tester de b
   **confirmer au 1er run réel**. Tout est surchargeable via `GENEMAN_CMD` sans rebuild.
 - **UniTEX** : env reproduit depuis le `env.sh` officiel (pas de pytorch3d — vérifié).
   slangtorch épinglé en **1.3.4** (version stable conseillée par le repo).
-- **Compilation CUDA** (nvdiffrast, kaolin, slangtorch, torch_kdtree) : build long
-  la 1ʳᵉ fois. Le cache GHA accélère les builds suivants.
-- **Disque runner GitHub** (14 Go) : les images CUDA sont grosses. Si le build GHA
-  manque d'espace, builder directement sur l'instance (`docker compose build`).
+- **Compilation CUDA** (nvdiffrast, kaolin, slangtorch, torch_kdtree) : le 1ʳᵉ
+  `up --build` est long. Builds suivants instantanés (image en cache local).
 - **Modèles gated** : sans acceptation de licence + `HF_TOKEN`, le download échoue.
 
 ## Structure
 
 ```
-├── docker-compose.yml          # 2 services GPU + ports API + volumes poids
-├── .env.example                # HF_TOKEN, REGISTRY, TAG
+├── docker-compose.yml          # 2 services GPU + build local + ports API + volumes
+├── .env.example                # HF_TOKEN (REGISTRY/TAG = option registry)
 ├── geneman/{Dockerfile,entrypoint.sh,api.py,run_geneman.sh}  # API :8001
 ├── unitex/{Dockerfile,entrypoint.sh,api.py}                  # API :8002
 ├── examples/client.html        # client web démo (affichage avec/sans texture)
 ├── scripts/bootstrap_instance.sh
-└── .github/workflows/build.yml # build + push GHCR
+└── .github/workflows/build.yml # OPTIONNEL : pré-build vers GHCR (manuel)
 ```
+
+## Option : pré-builder vers un registry (GHCR)
+
+Utile seulement si tu veux **éviter de recompiler sur une nouvelle instance**.
+Lance le workflow `Build & push images` manuellement (onglet **Actions**) : il
+pousse `ghcr.io/akralan/mytwin-{geneman,unitex}`. Sur l'instance, remplace alors
+les blocs `build:` du `docker-compose.yml` par `image: ghcr.io/...` et fais
+`docker compose pull && docker compose up -d`.
