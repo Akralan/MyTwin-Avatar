@@ -32,8 +32,10 @@ else
       --local-dir "$WEIGHTS/GeneMAN_hub"
   # -L : suit les symlinks (hf met les gros fichiers en lien vers son cache ;
   #      un cp -r normal copierait des liens cassés -> .bin "introuvable").
-  cp -rL "$WEIGHTS/GeneMAN_hub/pretrained_models/." "$PM/"
-  cp -rL "$WEIGHTS/GeneMAN_hub/tets" "$EXT/" 2>/dev/null || true
+  # --remove-destination : efface les vieux liens cassés côté destination avant
+  #      d'écrire le vrai contenu (sinon "not writing through dangling symlink").
+  cp -rL --remove-destination "$WEIGHTS/GeneMAN_hub/pretrained_models/." "$PM/"
+  cp -rL --remove-destination "$WEIGHTS/GeneMAN_hub/tets" "$EXT/" 2>/dev/null || true
 
   # 2) HumanNorm : repo HF (majuscule) -> dossier MINUSCULE attendu par les configs
   dl_hn() { huggingface-cli download "xanderhuang/$1" --local-dir "$PM/$2"; }
