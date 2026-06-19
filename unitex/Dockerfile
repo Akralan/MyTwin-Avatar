@@ -44,11 +44,17 @@ RUN pip install transformers diffusers bitsandbytes==0.45 tokenizers \
 # nvdiffrast + slangtorch (1.3.4 = version stable conseillée par le repo)
 RUN pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation
 RUN pip install slangtorch==1.3.4
-RUN pip install git+https://github.com/thomgrand/torch_kdtree.git --no-build-isolation
+# NB : torch_kdtree (build CMake+CUDA fragile) volontairement NON installé.
+#      Le module KNN d'UniTEX supporte aussi le backend 'cupy' (cupy-cuda12x déjà
+#      présent) -> on bascule le défaut dessus juste après le clone (sed plus bas).
 
 # --- Code UniTEX ---
 WORKDIR /app
 RUN git clone --depth 1 https://github.com/YixunLiang/UniTEX.git
+
+# Bascule le backend KNN par défaut torch_kdtree -> cupy (GPU, déjà installé)
+RUN sed -i "s/backend='torch_kdtree'/backend='cupy'/g" \
+        /app/UniTEX/TextureTools/texturetools/pcd/knn/__init__.py
 
 # Serveur API
 RUN pip install "huggingface_hub[cli]" fastapi "uvicorn[standard]" python-multipart
