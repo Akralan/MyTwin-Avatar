@@ -5,7 +5,7 @@ REPO=/app/GeneMAN
 WEIGHTS=/weights
 PM="$WEIGHTS/pretrained_models"     # poids -> sur le VOLUME (persistant)
 EXT="$WEIGHTS/extern"
-MARKER="$WEIGHTS/.geneman_weights_v2"
+MARKER="$WEIGHTS/.geneman_weights_v3"
 
 echo "==> GeneMAN entrypoint"
 
@@ -30,8 +30,10 @@ else
   # 1) Poids GeneMAN (dataset wwt117/GeneMAN : pretrained_models + tets)
   huggingface-cli download wwt117/GeneMAN --repo-type dataset \
       --local-dir "$WEIGHTS/GeneMAN_hub"
-  cp -r "$WEIGHTS/GeneMAN_hub/pretrained_models/." "$PM/"
-  cp -r "$WEIGHTS/GeneMAN_hub/tets" "$EXT/" 2>/dev/null || true
+  # -L : suit les symlinks (hf met les gros fichiers en lien vers son cache ;
+  #      un cp -r normal copierait des liens cassés -> .bin "introuvable").
+  cp -rL "$WEIGHTS/GeneMAN_hub/pretrained_models/." "$PM/"
+  cp -rL "$WEIGHTS/GeneMAN_hub/tets" "$EXT/" 2>/dev/null || true
 
   # 2) HumanNorm : repo HF (majuscule) -> dossier MINUSCULE attendu par les configs
   dl_hn() { huggingface-cli download "xanderhuang/$1" --local-dir "$PM/$2"; }
