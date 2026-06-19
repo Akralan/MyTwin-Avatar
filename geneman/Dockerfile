@@ -1,5 +1,6 @@
-# GeneMAN — base CUDA 11.8 "devel" (nvcc requis pour compiler les extensions CUDA)
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+# GeneMAN — base CUDA 12.1 "devel" : nvcc de CUDA 11.8 plante (segfault) en générant
+# du code Hopper (sm_90) pour nerfacc/tiny-cuda-nn/nvdiffrast -> CUDA 12.x requis pour H100.
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -20,9 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN python -m pip install --upgrade pip setuptools wheel
 
-# --- PyTorch (CUDA 11.8) ---
-RUN pip install torch==2.0.0 torchvision==0.15.1 \
-        --index-url https://download.pytorch.org/whl/cu118
+# --- PyTorch (CUDA 12.1) — 2.1.2 = version la plus proche du testé (2.0.0)
+#     disposant de wheels cu121, requise pour Hopper/sm_90. ---
+RUN pip install torch==2.1.2 torchvision==0.16.2 \
+        --index-url https://download.pytorch.org/whl/cu121
 
 # --- Code GeneMAN ---
 WORKDIR /app

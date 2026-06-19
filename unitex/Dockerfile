@@ -1,6 +1,7 @@
 # UniTEX — env reproduit depuis le env.sh officiel du repo.
-# Base CUDA 11.8 "devel" (nvcc requis : kaolin, nvdiffrast, slangtorch compilent).
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+# Base CUDA 12.1 "devel" : nvcc de CUDA 11.8 plante (segfault) en générant du code
+# Hopper (sm_90) pour les kernels nvdiffrast/slangtorch -> CUDA 12.x est requis pour H100.
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -18,17 +19,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN python -m pip install --upgrade pip setuptools wheel
 
-# --- PyTorch 2.4.1 (CUDA 11.8) ---
+# --- PyTorch 2.4.1 (CUDA 12.1) ---
 RUN pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 \
-        --index-url https://download.pytorch.org/whl/cu118
+        --index-url https://download.pytorch.org/whl/cu121
 
-# --- Kaolin (wheel officiel, comme dans env.sh) ---
-RUN wget -q https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.1_cu118/kaolin-0.17.0-cp310-cp310-linux_x86_64.whl \
-    && pip install kaolin-0.17.0-cp310-cp310-linux_x86_64.whl \
-    && rm kaolin-0.17.0-cp310-cp310-linux_x86_64.whl
+# --- Kaolin (wheel officiel cu121 pour torch 2.4.1) ---
+RUN pip install kaolin==0.17.0 \
+        -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.1_cu121.html
 
-# --- Dépendances (reproduit env.sh) ---
-RUN pip install xformers==0.0.28 --index-url https://download.pytorch.org/whl/cu118
+# --- Dépendances (reproduit env.sh, variantes cu12) ---
+RUN pip install xformers==0.0.28 --index-url https://download.pytorch.org/whl/cu121
 RUN pip install transformers diffusers bitsandbytes==0.45 tokenizers \
     && pip install tqdm ftfy regex safetensors thop opencv-python opencv-contrib-python datetime bypy lpips matplotlib imageio tensorboard \
     && pip install datasets accelerate einops h5py \
@@ -36,7 +36,7 @@ RUN pip install transformers diffusers bitsandbytes==0.45 tokenizers \
     && pip install pymcubes==0.1.6 pymeshlab==2023.12.post3 onnxruntime onnxruntime-gpu \
     && pip install trimesh==3.20.2 pyhocon deepspeed \
     && pip install rembg fpsample triton==3.0.0 open3d xatlas==0.0.10 \
-    && pip install gpytoolbox==0.3.3 cupy-cuda11x==13.4.1 \
+    && pip install gpytoolbox==0.3.3 cupy-cuda12x==13.4.1 \
     && pip install async-timeout==5.0.1 timeout-decorator==0.5.0 peft==0.15.2 \
     && pip install jaxtyping==0.3.1 sentencepiece==0.2.0 timm==0.6.13 kornia==0.8.0 \
     && pip install pyexr==0.5.0 imageio==2.37 imageio-ffmpeg==0.4.7

@@ -6,8 +6,11 @@ rien d'autre à faire.
 
 | Modèle | Rôle | Stack |
 |--------|------|-------|
-| [GeneMAN](https://github.com/3DTopia/GeneMAN) | Reconstruction 3D humain depuis 1 image | Py3.10 · torch 2.0 · CUDA 11.8 |
-| [UniTEX](https://github.com/YixunLiang/UniTEX) | Texturing haute fidélité de mesh 3D | Py3.10 · torch 2.4.1 · CUDA 11.8 |
+| [GeneMAN](https://github.com/3DTopia/GeneMAN) | Reconstruction 3D humain depuis 1 image | Py3.10 · torch 2.1.2 · CUDA 12.1 |
+| [UniTEX](https://github.com/YixunLiang/UniTEX) | Texturing haute fidélité de mesh 3D | Py3.10 · torch 2.4.1 · CUDA 12.1 |
+
+> 💡 CUDA **12.1** (et non 11.8) car le H100 (Hopper/sm_90) fait planter nvcc 11.8
+> lors de la compilation des kernels. Le driver de l'instance (CUDA 13) est compatible.
 
 > ⚠️ Chaque modèle exige un GPU costaud (GeneMAN : **≥ 20 Go VRAM**). Prends une
 > instance type **L40S / H100** chez Scaleway.
