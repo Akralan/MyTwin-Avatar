@@ -5,9 +5,6 @@
 #
 #   run_geneman.sh <image_in> <out_dir>
 # Produit : <out_dir>/model.obj (mesh géométrie) + <out_dir>/input_fg.png (image détourée)
-#
-# ⚠️ Les chemins exacts d'export (it5000-export, etc.) sont issus de run.sh du repo ;
-#    à confirmer au 1er run réel. Surchargeable globalement via GENEMAN_CMD dans api.py.
 set -euo pipefail
 
 IMAGE="$1"
@@ -20,7 +17,13 @@ cp "$IMAGE" "$WORK/raw/input.png"
 DATA="$WORK/processed"
 EXP="$WORK/outputs"
 ID="input"
-TS=""
+# Timestamp FIXE et NON VIDE : si vide, threestudio le traite comme None et génère
+# un horodatage différent à chaque appel (train vs export) -> last.ckpt introuvable.
+TS="_run"
+
+# Helpers : localisent le fichier le plus récent (robuste au nom exact du dossier).
+find_ckpt() { find "$1" -name last.ckpt -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-; }
+find_obj()  { find "$1" -name '*.obj'   -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-; }
 
 echo "==> [1/3] Préprocessing (détourage, normales, keypoints, caption)"
 python preprocessing.py "$WORK/raw" --output_path "$DATA" --recenter --enable_captioning
@@ -36,7 +39,8 @@ python launch.py --config configs/geneman-geometry-init.yaml --train \
     tag="$ID" timestamp="$TS" exp_root_dir="$EXP" \
     data.image_path="$IMG_FG" system.prompt_processor.prompt="$PROMPT"
 
-INIT_CKPT="$EXP/geneman-geometry-init/${ID}${TS}/ckpts/last.ckpt"
+INIT_CKPT="$(find_ckpt "$EXP/geneman-geometry-init")"
+[[ -n "$INIT_CKPT" ]] || { echo "!! Stage 1 : aucun last.ckpt trouvé"; exit 1; }
 python launch.py --config configs/geneman-geometry-init.yaml --export \
     tag="$ID" timestamp="$TS" exp_root_dir="$EXP" resume="$INIT_CKPT" \
     data.image_path="$IMG_FG" system.prompt_processor.prompt="$PROMPT" \
@@ -45,7 +49,8 @@ python launch.py --config configs/geneman-geometry-init.yaml --export \
     system.geometry.isosurface_method=mc-cpu \
     system.geometry.isosurface_resolution=256
 
-MESH_INIT="$EXP/geneman-geometry-init/${ID}${TS}/save/it5000-export/model.obj"
+MESH_INIT="$(find_obj "$EXP/geneman-geometry-init")"
+[[ -n "$MESH_INIT" ]] || { echo "!! Stage 1 : aucun mesh exporté"; exit 1; }
 
 echo "==> [3/3] Stage 2 — sculpting géométrie"
 python launch.py --config configs/geneman-geometry-sculpt.yaml --train \
@@ -56,7 +61,8 @@ python launch.py --config configs/geneman-geometry-sculpt.yaml --train \
     system.prompt_processor.human_part_prompt=false \
     system.geometry.shape_init="mesh:$MESH_INIT"
 
-SCULPT_CKPT="$EXP/geneman-geometry-sculpt/${ID}${TS}/ckpts/last.ckpt"
+SCULPT_CKPT="$(find_ckpt "$EXP/geneman-geometry-sculpt")"
+[[ -n "$SCULPT_CKPT" ]] || { echo "!! Stage 2 : aucun last.ckpt trouvé"; exit 1; }
 python launch.py --config configs/geneman-geometry-sculpt.yaml --export \
     tag="$ID" timestamp="$TS" exp_root_dir="$EXP" resume="$SCULPT_CKPT" \
     data.image_path="$IMG_FG" system.prompt_processor.prompt="$PROMPT" \
@@ -65,8 +71,8 @@ python launch.py --config configs/geneman-geometry-sculpt.yaml --export \
 
 echo "==> Récupération du mesh final"
 mkdir -p "$OUT"
-# Le dernier .obj exporté par le stage sculpt = mesh géométrie final
-FINAL="$(find "$EXP/geneman-geometry-sculpt" -name '*.obj' -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)"
+FINAL="$(find_obj "$EXP/geneman-geometry-sculpt")"
+[[ -n "$FINAL" ]] || { echo "!! aucun mesh final trouvé"; exit 1; }
 cp "$FINAL" "$OUT/model.obj"
 cp "$IMG_FG" "$OUT/input_fg.png"   # image détourée -> à renvoyer ensuite à UniTEX
 echo "==> Terminé : $OUT/model.obj"
