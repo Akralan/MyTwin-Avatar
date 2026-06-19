@@ -45,6 +45,46 @@ bash scripts/bootstrap_instance.sh       # Docker + toolkit GPU, puis build + up
 > ⏱️ Le 1ʳᵉ `up --build` est **long** (compilations CUDA : kaolin, nvdiffrast,
 > slangtorch). Les démarrages suivants réutilisent l'image (`docker compose up -d`).
 
+## 💽 Disque : Docker sur le `/scratch`
+
+Le disque root des instances GPU est trop petit pour 2 images CUDA (~55 Go) + les
+poids (GeneMAN ~30 Go, Sapiens 8 Go, BLIP2 10 Go, FLUX 24 Go…). On déplace donc les
+données Docker sur le gros `/scratch` (2,7 To), **une fois** :
+
+```bash
+docker compose down
+sudo systemctl stop docker docker.socket
+sudo rsync -aP /var/lib/docker/ /scratch/docker/
+echo '{ "data-root": "/scratch/docker" }' | sudo tee /etc/docker/daemon.json
+sudo systemctl start docker
+docker info | grep "Docker Root Dir"     # doit afficher /scratch/docker
+sudo rm -rf /var/lib/docker              # libère le disque root
+```
+
+## 🔁 Redémarrage après un power off
+
+⚠️ Le `/scratch` est **éphémère** : son contenu (images, poids, cache) est **perdu
+si tu éteins l'instance** (il survit à un simple `reboot`, pas à un arrêt complet).
+En revanche `/etc/docker/daemon.json` est sur le disque root → **le déplacement vers
+le scratch n'est PAS à refaire**, seulement le rebuild + re-téléchargement.
+
+```bash
+cd ~/MyTwin-Avatar
+bash scripts/restart_after_poweroff.sh   # vérifie le scratch, rebuild, redémarre
+```
+
+Ou manuellement :
+```bash
+df -h /scratch                           # 1. confirmer que /scratch (2,7T) est monté
+docker info | grep "Docker Root Dir"     # 2. doit être /scratch/docker
+git pull && docker compose up -d --build # 3. rebuild (~10-15 min) + démarrage
+docker compose logs -f                   # 4. les poids se re-téléchargent tout seuls
+```
+
+> 💡 **Persistance permanente** (zéro rebuild/re-DL à chaque arrêt) : attacher un
+> **Block Storage** Scaleway (disque réseau persistant) et y mettre `data-root` +
+> les volumes, au lieu du scratch. Plus cher mais permanent.
+
 Chaque modèle expose alors une **API HTTP** :
 
 | Modèle | Endpoint | Port hôte |
