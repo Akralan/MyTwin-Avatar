@@ -29,7 +29,9 @@ RUN pip install kaolin==0.17.0 \
 
 # --- Dépendances (reproduit env.sh, variantes cu12) ---
 RUN pip install xformers==0.0.28 --index-url https://download.pytorch.org/whl/cu121
-RUN pip install transformers diffusers bitsandbytes==0.45 tokenizers \
+# Versions épinglées d'après le requirements.txt du repo (trio cohérent FLUX) :
+# transformers 4.52.4 + diffusers 0.32.2 + peft 0.15.2 (plus bas).
+RUN pip install transformers==4.52.4 diffusers==0.32.2 bitsandbytes==0.45 tokenizers \
     && pip install tqdm ftfy regex safetensors thop opencv-python opencv-contrib-python datetime bypy lpips matplotlib imageio tensorboard \
     && pip install datasets accelerate einops h5py \
     && pip install calflops OmegaConf icecream \
@@ -37,7 +39,7 @@ RUN pip install transformers diffusers bitsandbytes==0.45 tokenizers \
     && pip install trimesh==3.20.2 pyhocon deepspeed \
     && pip install rembg fpsample triton==3.0.0 open3d xatlas==0.0.10 \
     && pip install gpytoolbox==0.3.3 cupy-cuda12x==13.4.1 \
-    && pip install async-timeout==5.0.1 timeout-decorator==0.5.0 peft==0.17.0 \
+    && pip install async-timeout==5.0.1 timeout-decorator==0.5.0 peft==0.15.2 \
     && pip install jaxtyping==0.3.1 sentencepiece==0.2.0 timm==0.6.13 kornia==0.8.0 \
     && pip install pyexr==0.5.0 imageio==2.37 imageio-ffmpeg==0.4.7
 
