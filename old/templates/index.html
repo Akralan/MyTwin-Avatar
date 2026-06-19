@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MyTwin — 3D Body Reconstruction</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #e8eef8;
+      --surface:     #ffffff;
+      --navy:        #0f172a;
+      --navy-mid:    #1e3a5f;
+      --teal:        #2dd4bf;
+      --teal-dark:   #0d9488;
+      --teal-pill:   #b2f0e8;
+      --gray:        #64748b;
+      --gray-light:  #94a3b8;
+      --border:      #d1daea;
+      --border-teal: rgba(45, 212, 191, 0.35);
+      --shadow-sm:   0 1px 3px rgba(15,23,42,0.07), 0 1px 2px rgba(15,23,42,0.04);
+      --shadow-md:   0 4px 16px rgba(15,23,42,0.09), 0 2px 6px rgba(15,23,42,0.05);
+      --radius:      14px;
+      --radius-sm:   9px;
+      --radius-pill: 100px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--navy);
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 28px;
+      height: 58px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      position: relative;
+      z-index: 10;
+    }
+
+    .logo-wrap {
+      display: flex;
+      flex-direction: column;
+      line-height: 1;
+    }
+
+    .logo-wrap .wordmark {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--navy);
+      letter-spacing: -0.5px;
+    }
+
+    .logo-wrap .sub {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--teal);
+      letter-spacing: 0.5px;
+      margin-top: 1px;
+    }
+
+    .header-sep {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      margin: 0 6px;
+    }
+
+    header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--navy-mid);
+    }
+
+    #model-status {
+      margin-left: auto;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      letter-spacing: 0.2px;
+    }
+    #model-status.loading { background: #f1f5f9; color: var(--gray); }
+    #model-status.ready   { background: #d1fae5; color: #065f46; }
+    #model-status.error   { background: #fee2e2; color: #991b1b; }
+
+    /* ── LAYOUT ── */
+    main {
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      height: calc(100vh - 58px);
+    }
+
+    /* ── LEFT PANEL ── */
+    .left-panel {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-label {
+      padding: 20px 24px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--gray-light);
+    }
+
+    /* DROP ZONE */
+    #drop-zone {
+      margin: 0 20px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+      padding: 38px 24px;
+      min-height: 210px;
+    }
+
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: var(--teal);
+      background: rgba(45, 212, 191, 0.04);
+      box-shadow: 0 0 0 4px rgba(45,212,191,0.1);
+    }
+
+    .drop-icon {
+      width: 54px; height: 54px;
+      background: linear-gradient(135deg, rgba(45,212,191,0.12), rgba(45,212,191,0.04));
+      border: 1.5px solid var(--border-teal);
+      border-radius: 14px;
+      display: grid; place-items: center;
+    }
+    .drop-icon svg { width: 26px; height: 26px; color: var(--teal-dark); }
+
+    #drop-zone h2 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    #drop-zone p {
+      font-size: 13px;
+      color: var(--gray);
+      line-height: 1.5;
+    }
+
+    .btn-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 9px 22px;
+      background: var(--teal-pill);
+      color: var(--navy);
+      font-size: 13px;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-pill:hover { background: #87e8dc; transform: translateY(-1px); }
+    .btn-pill:active { transform: translateY(0); }
+
+    #file-input { display: none; }
+
+    /* PREVIEW */
+    #preview-wrap {
+      margin: 0 20px;
+      display: none;
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      min-height: 200px;
+      background: var(--bg);
+    }
+    #preview-wrap.visible { display: block; }
+
+    #preview-img {
+      width: 100%;
+      display: block;
+      max-height: 300px;
+      object-fit: cover;
+      border-radius: var(--radius);
+    }
+
+    #preview-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(232,238,248,0.82);
+      backdrop-filter: blur(6px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      border-radius: var(--radius);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    #preview-overlay.visible { opacity: 1; pointer-events: all; }
+
+    .spinner {
+      width: 34px; height: 34px;
+      border: 3px solid rgba(45,212,191,0.25);
+      border-top-color: var(--teal);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #overlay-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--navy-mid);
+    }
+
+    .btn-change {
+      margin: 10px 20px 0;
+      display: block;
+      padding: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--gray);
+      background: transparent;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      text-align: center;
+    }
+    .btn-change:hover { border-color: var(--teal); color: var(--teal-dark); }
+    .btn-change.hidden { display: none; }
+
+    /* STATUS */
+    #status-bar {
+      margin: 14px 20px 0;
+      padding: 11px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+    #status-bar.visible { display: flex; }
+    #status-bar.success { background: #d1fae5; color: #065f46; }
+    #status-bar.error   { background: #fee2e2; color: #991b1b; }
+    #status-bar.info    { background: rgba(45,212,191,0.1); color: var(--teal-dark); border: 1px solid var(--border-teal); }
+
+    /* PERSON SELECTOR */
+    #person-selector {
+      margin: 10px 20px 0;
+      display: none;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    #person-selector.visible { display: flex; }
+
+    .person-btn {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 16px;
+      border-radius: var(--radius-pill);
+      border: 1.5px solid var(--border);
+      background: transparent;
+      color: var(--gray);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .person-btn:hover { border-color: var(--teal); color: var(--teal-dark); }
+    .person-btn.active { background: var(--teal-pill); border-color: var(--teal); color: var(--navy); }
+
+    /* TIPS */
+    .tips {
+      margin: auto 20px 20px;
+      padding-top: 16px;
+    }
+    .tips-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gray-light);
+      margin-bottom: 10px;
+    }
+    .tips ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .tips li {
+      font-size: 12.5px;
+      color: var(--gray);
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      line-height: 1.5;
+    }
+    .tip-dot {
+      width: 6px; height: 6px;
+      min-width: 6px;
+      border-radius: 50%;
+      background: var(--teal);
+      margin-top: 6px;
+    }
+
+    /* ── RIGHT PANEL ── */
+    .right-panel {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .viewer-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 24px;
+      height: 46px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .viewer-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--gray-light);
+    }
+    #controls-hint {
+      margin-left: auto;
+      font-size: 11.5px;
+      color: var(--gray-light);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #controls-hint.visible { opacity: 1; }
+
+    #viewer {
+      flex: 1;
+      position: relative;
+    }
+
+    /* dot grid bg */
+    .dot-grid {
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(15,23,42,0.08) 1px, transparent 1px);
+      background-size: 28px 28px;
+      pointer-events: none;
+    }
+
+    #three-canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    /* EMPTY STATE */
+    #empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #empty-state.hidden { opacity: 0; }
+
+    .empty-icon {
+      width: 76px; height: 76px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      display: grid; place-items: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .empty-icon svg { width: 36px; height: 36px; color: var(--gray-light); }
+
+    #empty-state h3 { font-size: 16px; font-weight: 700; color: var(--navy); }
+    #empty-state p  { font-size: 13px; color: var(--gray); }
+
+    /* DOWNLOAD */
+    #download-bar {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #download-bar.visible { opacity: 1; pointer-events: all; }
+
+    .dl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 20px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-pill);
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--navy);
+      text-decoration: none;
+      box-shadow: var(--shadow-md);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .dl-btn:hover {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(45,212,191,0.15), var(--shadow-md);
+    }
+    .dl-btn svg { color: var(--teal-dark); }
+    #download-bar { display: flex; gap: 10px; }
+    .dl-btn.hidden { display: none; }
+
+    /* ── SETTINGS (petit bouton + toast) ── */
+    .icon-btn {
+      margin-left: 12px;
+      width: 32px; height: 32px;
+      display: grid; place-items: center;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      color: var(--gray);
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    .icon-btn:hover { border-color: var(--teal); color: var(--teal-dark); }
+    .icon-btn svg { width: 17px; height: 17px; }
+
+    .toast {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 16px;
+      width: 280px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      padding: 15px 16px;
+      z-index: 50;
+      opacity: 0;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition: opacity .18s, transform .18s;
+    }
+    .toast.visible { opacity: 1; transform: translateY(0); pointer-events: all; }
+    .toast-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--gray-light); margin-bottom: 12px;
+    }
+    .toast-sep { height: 1px; background: var(--border); margin: 13px 0; }
+    .toast-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .toast-row .lbl  { font-size: 13px; font-weight: 600; color: var(--navy); }
+    .toast-row .desc { font-size: 11.5px; color: var(--gray); margin-top: 3px; line-height: 1.4; }
+
+    .switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; margin-top: 1px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .slider {
+      position: absolute; inset: 0; cursor: pointer;
+      background: var(--border); border-radius: var(--radius-pill); transition: background .2s;
+    }
+    .switch .slider::before {
+      content: ""; position: absolute; height: 16px; width: 16px; left: 3px; top: 3px;
+      background: #fff; border-radius: 50%; transition: transform .2s; box-shadow: var(--shadow-sm);
+    }
+    .switch input:checked + .slider { background: var(--teal); }
+    .switch input:checked + .slider::before { transform: translateX(16px); }
+
+    /* ── BANDEAU POSE (haut du viewer, visible si rig actif) ── */
+    #pose-bar {
+      position: absolute;
+      top: 14px; left: 50%; transform: translateX(-50%);
+      display: none; gap: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      padding: 4px;
+      box-shadow: var(--shadow-md);
+      z-index: 6;
+    }
+    #pose-bar.visible { display: flex; }
+    .pose-btn {
+      font-size: 12px; font-weight: 600;
+      padding: 6px 15px;
+      border: none; background: transparent; color: var(--gray);
+      border-radius: var(--radius-pill); cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .pose-btn:hover { color: var(--teal-dark); }
+    .pose-btn.active { background: var(--teal-pill); color: var(--navy); }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-wrap">
+    <span class="wordmark">MyTwin</span>
+    <span class="sub">Avatar</span>
+  </div>
+  <div class="header-sep"></div>
+  <h1>3D Body Reconstruction</h1>
+  <div id="model-status" class="loading">Chargement du modèle…</div>
+
+  <button id="settings-btn" class="icon-btn" title="Paramètres" aria-label="Paramètres">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h10.5M10.5 6a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM3 6h4.5m3 6H21m-10.5 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM3 12h4.5m9 6H21m-4.5 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM3 18h10.5"/>
+    </svg>
+  </button>
+
+  <div id="settings-toast" class="toast">
+    <div class="toast-title">Paramètres</div>
+    <div class="toast-row">
+      <div>
+        <div class="lbl">Générer le rig</div>
+        <div class="desc">Exporte aussi un <strong>.glb</strong> riggé (squelette + skin), animable dans Blender. Ajoute quelques secondes.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="rig-toggle" />
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="toast-sep"></div>
+    <div class="toast-row">
+      <div>
+        <div class="lbl">Texturer le modèle</div>
+        <div class="desc">Génère une <strong>texture</strong> (Paint3D) depuis la photo et l'affiche sur le mesh. Lent : plusieurs minutes. Désactive le rig.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="tex-toggle" />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT -->
+  <div class="left-panel">
+    <div class="panel-label">Image source</div>
+
+    <div id="drop-zone">
+      <div class="drop-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+        </svg>
+      </div>
+      <h2>Déposez votre photo ici</h2>
+      <p>JPG, PNG, WEBP — portrait recommandé</p>
+      <button class="btn-pill" id="browse-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+        </svg>
+        Choisir un fichier
+      </button>
+    </div>
+    <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.bmp,.webp,.tiff" />
+
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt="Preview" />
+      <div id="preview-overlay">
+        <div class="spinner"></div>
+        <div id="overlay-text">Reconstruction 3D en cours…</div>
+      </div>
+    </div>
+
+    <button class="btn-change hidden" id="change-btn">Changer d'image</button>
+
+    <div id="status-bar"></div>
+    <div id="person-selector"></div>
+
+    <div class="tips">
+      <div class="tips-label">Comment ça marche</div>
+      <ul>
+        <li><span class="tip-dot"></span>Importez une photo avec une personne visible</li>
+        <li><span class="tip-dot"></span>L'IA reconstruit un maillage 3D du corps</li>
+        <li><span class="tip-dot"></span>Explorez le résultat dans le viewer interactif</li>
+        <li><span class="tip-dot"></span>Téléchargez le .ply pour Blender ou MeshLab</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right-panel">
+    <div class="viewer-bar">
+      <span class="viewer-label">Viewer 3D</span>
+      <span id="controls-hint">Tourner · Scroll pour zoomer · Clic droit pour déplacer</span>
+    </div>
+
+    <div id="viewer">
+      <div class="dot-grid"></div>
+
+      <div id="pose-bar">
+        <button class="pose-btn active" data-pose="photo">Pose de la photo</button>
+        <button class="pose-btn" data-pose="apose">A-pose</button>
+      </div>
+
+      <div id="empty-state">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+          </svg>
+        </div>
+        <h3>Le modèle 3D apparaîtra ici</h3>
+        <p>Déposez une image pour démarrer la reconstruction</p>
+      </div>
+
+      <canvas id="three-canvas"></canvas>
+
+      <div id="download-bar">
+        <a id="dl-link" class="dl-btn" href="#" download>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+          </svg>
+          <span id="dl-label">Télécharger le .ply</span>
+        </a>
+        <a id="dl-glb" class="dl-btn hidden" href="#" download>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/>
+          </svg>
+          Rig .glb
+        </a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const canvas   = document.getElementById('three-canvas');
+const viewer   = document.getElementById('viewer');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, viewer.clientWidth / viewer.clientHeight, 0.001, 1000);
+camera.position.set(0, 0, 3);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.07;
+controls.minDistance    = 0.1;
+controls.maxDistance    = 20;
+
+// Lighting — bright & clean for light theme
+const ambient = new THREE.AmbientLight(0xffffff, 0.85);
+scene.add(ambient);
+const key = new THREE.DirectionalLight(0xffffff, 1.3);
+key.position.set(3, 5, 4);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xe0f7f5, 0.5);
+fill.position.set(-4, 0, -2);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x2dd4bf, 0.2);
+rim.position.set(0, -4, -4);
+scene.add(rim);
+
+let currentMesh = null;
+
+// Retire et libère l'objet 3D courant (mesh PLY ou scène GLB).
+function disposeCurrent() {
+  if (!currentMesh) return;
+  scene.remove(currentMesh);
+  currentMesh.traverse?.(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(m => { m.map?.dispose(); m.dispose(); });
+    }
+  });
+  if (currentMesh.geometry) currentMesh.geometry.dispose();
+  if (currentMesh.material) currentMesh.material.dispose();
+}
+
+// Centre l'objet à l'origine et cadre la caméra dessus.
+function frameObject(obj) {
+  const box    = new THREE.Box3().setFromObject(obj);
+  const center = box.getCenter(new THREE.Vector3());
+  const size   = box.getSize(new THREE.Vector3());
+  obj.position.sub(center);
+
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const fovRad = camera.fov * (Math.PI / 180);
+  const dist   = (maxDim / 2) / Math.tan(fovRad / 2) * 1.6;
+  camera.position.set(0, 0, dist);
+  controls.minDistance = dist * 0.05;
+  controls.maxDistance = dist * 8;
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+window.loadPLY = function(url) {
+  document.getElementById('empty-state').classList.add('hidden');
+  const loader = new PLYLoader();
+  loader.load(url, (geometry) => {
+    disposeCurrent();
+    geometry.computeVertexNormals();
+    const hasColor = geometry.hasAttribute('color');
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: hasColor,
+      color:        hasColor ? 0xffffff : 0xa8c8d8,
+      roughness:    0.5,
+      metalness:    0.05,
+    });
+    currentMesh = new THREE.Mesh(geometry, mat);
+    frameObject(currentMesh);
+    scene.add(currentMesh);
+    document.getElementById('controls-hint').classList.add('visible');
+    document.getElementById('download-bar').classList.add('visible');
+    document.getElementById('dl-link').href     = url;
+    document.getElementById('dl-link').download = url.split('/').pop();
+    document.getElementById('dl-label').textContent = 'Télécharger le .ply';
+  });
+};
+
+// Charge un GLB texturé (Paint3D) et l'affiche avec sa texture.
+window.loadGLB = function(url) {
+  document.getElementById('empty-state').classList.add('hidden');
+  const loader = new GLTFLoader();
+  loader.load(url, (gltf) => {
+    disposeCurrent();
+    currentMesh = gltf.scene;
+    currentMesh.traverse(o => {
+      if (o.isMesh && o.material && o.material.map) {
+        o.material.map.colorSpace = THREE.SRGBColorSpace;
+        o.material.needsUpdate = true;
+      }
+    });
+    frameObject(currentMesh);
+    scene.add(currentMesh);
+    document.getElementById('controls-hint').classList.add('visible');
+    document.getElementById('download-bar').classList.add('visible');
+    document.getElementById('dl-link').href     = url;
+    document.getElementById('dl-link').download = url.split('/').pop();
+    document.getElementById('dl-label').textContent = 'Télécharger le .glb';
+  });
+};
+
+(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+
+new ResizeObserver(() => {
+  const w = viewer.clientWidth, h = viewer.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}).observe(viewer);
+
+// ── UI ──
+const dropZone       = document.getElementById('drop-zone');
+const fileInput      = document.getElementById('file-input');
+const browseBtn      = document.getElementById('browse-btn');
+const previewWrap    = document.getElementById('preview-wrap');
+const previewImg     = document.getElementById('preview-img');
+const previewOverlay = document.getElementById('preview-overlay');
+const overlayText    = document.getElementById('overlay-text');
+const statusBar      = document.getElementById('status-bar');
+const personSelector = document.getElementById('person-selector');
+const changeBtn      = document.getElementById('change-btn');
+const emptyState     = document.getElementById('empty-state');
+const modelStatus    = document.getElementById('model-status');
+const settingsBtn    = document.getElementById('settings-btn');
+const settingsToast  = document.getElementById('settings-toast');
+const rigToggle      = document.getElementById('rig-toggle');
+const texToggle      = document.getElementById('tex-toggle');
+const dlGlb          = document.getElementById('dl-glb');
+
+let pollTimer = null;
+let glbFiles  = [];
+
+// Toast paramètres : ouvre/ferme, et se referme au clic extérieur
+settingsBtn.addEventListener('click', e => { e.stopPropagation(); settingsToast.classList.toggle('visible'); });
+document.addEventListener('click', e => {
+  if (!settingsToast.contains(e.target) && !settingsBtn.contains(e.target))
+    settingsToast.classList.remove('visible');
+});
+
+// Rig et texture sont mutuellement exclusifs : activer l'un désactive l'autre.
+rigToggle.addEventListener('change', () => { if (rigToggle.checked) texToggle.checked = false; });
+texToggle.addEventListener('change', () => { if (texToggle.checked) rigToggle.checked = false; });
+
+function setGlb(idx) {
+  if (glbFiles[idx]) {
+    dlGlb.href = glbFiles[idx];
+    dlGlb.download = glbFiles[idx].split('/').pop();
+    dlGlb.classList.remove('hidden');
+  } else {
+    dlGlb.classList.add('hidden');
+  }
+}
+
+// ── Sélecteur de pose (bandeau viewer, actif seulement si rig généré) ──
+const poseBar = document.getElementById('pose-bar');
+let poseFiles = [];        // [{photo, apose}, ...] quand le rig est généré
+let texFiles  = [];        // .glb texturés (mode texture Paint3D)
+let currentPlys = [];      // .ply standards (mode sans rig)
+let currentPoseMode = 'photo';
+let currentPersonIdx = 0;
+
+function meshUrlFor(idx) {
+  if (poseFiles.length && poseFiles[idx]) return poseFiles[idx][currentPoseMode];
+  return currentPlys[idx];
+}
+function showPerson(idx) {
+  currentPersonIdx = idx;
+  // Mode texture : on affiche le GLB texturé. Sinon le .ply (éventuellement posé).
+  if (texFiles.length && texFiles[idx]) {
+    loadGLB(texFiles[idx]);
+    dlGlb.classList.add('hidden');
+    return;
+  }
+  const url = meshUrlFor(idx);
+  if (url) loadPLY(url);
+  setGlb(idx);
+}
+poseBar.querySelectorAll('.pose-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (!poseFiles.length) return;
+    poseBar.querySelectorAll('.pose-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPoseMode = btn.dataset.pose;
+    showPerson(currentPersonIdx);
+  });
+});
+
+async function pollModelStatus() {
+  try {
+    const d = await fetch('/model_status').then(r => r.json());
+    if (d.ready) {
+      modelStatus.textContent = 'Modèle prêt';
+      modelStatus.className   = 'ready';
+    } else if (d.error) {
+      modelStatus.textContent = 'Erreur modèle';
+      modelStatus.className   = 'error';
+      modelStatus.title       = d.error;
+    } else {
+      setTimeout(pollModelStatus, 2000);
+    }
+  } catch { setTimeout(pollModelStatus, 3000); }
+}
+pollModelStatus();
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+browseBtn.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
+dropZone.addEventListener('click',  () => fileInput.click());
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+changeBtn.addEventListener('click', () => { resetUI(); fileInput.click(); });
+
+function showStatus(msg, type = 'info') {
+  statusBar.textContent = msg;
+  statusBar.className   = `visible ${type}`;
+}
+
+function resetUI() {
+  if (pollTimer) clearInterval(pollTimer);
+  previewWrap.classList.remove('visible');
+  previewOverlay.classList.remove('visible');
+  dropZone.style.display   = '';
+  changeBtn.classList.add('hidden');
+  statusBar.className      = '';
+  personSelector.className = '';
+  personSelector.innerHTML = '';
+  document.getElementById('download-bar').classList.remove('visible');
+  document.getElementById('controls-hint').classList.remove('visible');
+  glbFiles = [];
+  dlGlb.classList.add('hidden');
+  poseFiles = [];
+  texFiles = [];
+  currentPlys = [];
+  currentPoseMode = 'photo';
+  poseBar.classList.remove('visible');
+  emptyState.classList.remove('hidden');
+}
+
+async function handleFile(file) {
+  previewImg.src = URL.createObjectURL(file);
+  dropZone.style.display = 'none';
+  previewWrap.classList.add('visible');
+  previewOverlay.classList.add('visible');
+  overlayText.textContent = 'Envoi en cours…';
+  changeBtn.classList.remove('hidden');
+  showStatus('Envoi de l\'image…', 'info');
+
+  const fd = new FormData();
+  fd.append('image', file);
+  fd.append('rig', rigToggle.checked ? '1' : '0');
+  fd.append('texture', texToggle.checked ? '1' : '0');
+
+  let jobId;
+  try {
+    const res  = await fetch('/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Échec upload');
+    jobId = data.job_id;
+  } catch (err) {
+    previewOverlay.classList.remove('visible');
+    showStatus('Erreur : ' + err.message, 'error');
+    return;
+  }
+
+  if (texToggle.checked) {
+    overlayText.textContent = 'Reconstruction + texturage (plusieurs min)…';
+    showStatus('Texturage Paint3D en cours — cela peut prendre plusieurs minutes…', 'info');
+  } else {
+    overlayText.textContent = 'Reconstruction 3D en cours…';
+    showStatus('Reconstruction du corps en 3D…', 'info');
+  }
+
+  pollTimer = setInterval(async () => {
+    try {
+      const d = await fetch(`/status/${jobId}`).then(r => r.json());
+
+      if (d.status === 'done') {
+        clearInterval(pollTimer);
+        previewOverlay.classList.remove('visible');
+        const plys = d.ply_files || [];
+
+        if (!plys.length) {
+          showStatus('Aucune personne détectée dans cette image.', 'error');
+          return;
+        }
+
+        glbFiles    = d.glb_files || [];
+        poseFiles   = d.pose_files || [];
+        texFiles    = d.tex_files || [];
+        currentPlys = plys;
+        currentPoseMode = 'photo';
+        poseBar.querySelectorAll('.pose-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+        // Le bandeau de pose n'a de sens qu'en mode rig (pas en mode texture).
+        poseBar.classList.toggle('visible', poseFiles.length > 0 && !texFiles.length);
+
+        showStatus(`✓ ${d.person_count} personne${d.person_count > 1 ? 's' : ''} détectée${d.person_count > 1 ? 's' : ''}`, 'success');
+
+        if (plys.length > 1) {
+          personSelector.innerHTML = plys.map((_, i) =>
+            `<button class="person-btn${i===0?' active':''}" data-idx="${i}">Personne ${i+1}</button>`
+          ).join('');
+          personSelector.classList.add('visible');
+          personSelector.querySelectorAll('.person-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              personSelector.querySelectorAll('.person-btn').forEach(b => b.classList.remove('active'));
+              btn.classList.add('active');
+              showPerson(+btn.dataset.idx);
+            });
+          });
+        }
+
+        showPerson(0);
+
+      } else if (d.status === 'error') {
+        clearInterval(pollTimer);
+        previewOverlay.classList.remove('visible');
+        showStatus('Erreur : ' + (d.error || 'Inconnue'), 'error');
+      }
+    } catch { /* réseau — on continue à poller */ }
+  }, 1200);
+}
+</script>
+</body>
+</html>

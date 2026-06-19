@@ -3,37 +3,46 @@ set -euo pipefail
 
 REPO=/app/GeneMAN
 WEIGHTS=/weights
-MARKER="$WEIGHTS/.geneman_weights_ok"
+PM="$WEIGHTS/pretrained_models"     # poids -> sur le VOLUME (persistant)
+EXT="$WEIGHTS/extern"
+MARKER="$WEIGHTS/.geneman_weights_v2"
 
 echo "==> GeneMAN entrypoint"
 
-if [[ -f "$MARKER" ]]; then
-  echo "==> Poids déjà présents, skip du téléchargement."
-else
-  echo "==> Téléchargement des poids depuis HuggingFace..."
+mkdir -p "$PM/seg" "$EXT"
 
-  # Token HF (nécessaire pour certains modèles gated) — passé via .env
+# Symlinks repo -> volume, recréés À CHAQUE démarrage pour survivre à la
+# recréation du conteneur (sinon /app/GeneMAN/pretrained_models, qui est DANS
+# l'image, repart vide et on perd SAM/HumanNorm/Sapiens).
+rm -rf "$REPO/pretrained_models"
+ln -sfn "$PM" "$REPO/pretrained_models"
+mkdir -p "$REPO/extern"
+ln -sfn "$EXT/tets" "$REPO/extern/tets"
+
+if [[ -f "$MARKER" ]]; then
+  echo "==> Poids déjà présents (volume), skip du téléchargement."
+else
+  echo "==> Téléchargement des poids depuis HuggingFace (vers le volume)..."
   if [[ -n "${HF_TOKEN:-}" ]]; then
     huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential || true
   fi
 
-  mkdir -p "$REPO/pretrained_models" "$REPO/extern" "$REPO/pretrained_models/seg"
-
-  # 1) Poids GeneMAN (dataset wwt117/GeneMAN : dossiers pretrained_models + tets)
+  # 1) Poids GeneMAN (dataset wwt117/GeneMAN : pretrained_models + tets)
   huggingface-cli download wwt117/GeneMAN --repo-type dataset \
       --local-dir "$WEIGHTS/GeneMAN_hub"
-  cp -r "$WEIGHTS/GeneMAN_hub/pretrained_models/." "$REPO/pretrained_models/"
-  cp -r "$WEIGHTS/GeneMAN_hub/tets" "$REPO/extern/" 2>/dev/null || true
+  cp -r "$WEIGHTS/GeneMAN_hub/pretrained_models/." "$PM/"
+  cp -r "$WEIGHTS/GeneMAN_hub/tets" "$EXT/" 2>/dev/null || true
 
-  # 2) HumanNorm (modèles SD adaptés)
-  for M in Normal-adapted-sd1.5 Depth-adapted-sd1.5 Normal-aligned-sd1.5 controlnet-normal-sd1.5; do
-    huggingface-cli download "xanderhuang/$M" \
-        --local-dir "$REPO/pretrained_models/$M"
-  done
+  # 2) HumanNorm : repo HF (majuscule) -> dossier MINUSCULE attendu par les configs
+  dl_hn() { huggingface-cli download "xanderhuang/$1" --local-dir "$PM/$2"; }
+  dl_hn Normal-adapted-sd1.5     normal-adapted-sd1.5
+  dl_hn Depth-adapted-sd1.5      depth-adapted-sd1.5
+  dl_hn Normal-aligned-sd1.5     normal-aligned-sd1.5
+  dl_hn controlnet-normal-sd1.5  controlnet-normal-sd1.5
 
-  # 3) SAM ViT-H (segmentation)
-  if [[ ! -f "$REPO/pretrained_models/seg/sam_vit_h_4b8939.pth" ]]; then
-    wget -q -O "$REPO/pretrained_models/seg/sam_vit_h_4b8939.pth" \
+  # 3) SAM ViT-H (chemin attendu par preprocessing.py : pretrained_models/seg/)
+  if [[ ! -f "$PM/seg/sam_vit_h_4b8939.pth" ]]; then
+    wget -q -O "$PM/seg/sam_vit_h_4b8939.pth" \
       https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
   fi
 

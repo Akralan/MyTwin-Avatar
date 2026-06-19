@@ -41,9 +41,16 @@ OUTPUT_DIR = Path("output")
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# =====================================================================
+#  >>> METS ICI L'IP PUBLIQUE DE TON INSTANCE SCALEWAY <<<
+#  Exemple : INSTANCE_IP = "51.159.12.34"
+# =====================================================================
+INSTANCE_IP = "51.159.154.84"
+
 # --- Endpoints des API distantes ---
-GENEMAN_API = os.environ.get("GENEMAN_API_URL", "http://127.0.0.1:8001").rstrip("/")
-UNITEX_API  = os.environ.get("UNITEX_API_URL",  "http://127.0.0.1:8002").rstrip("/")
+# (surchargeables par variables d'env si besoin, sinon construits depuis INSTANCE_IP)
+GENEMAN_API = os.environ.get("GENEMAN_API_URL", f"http://{INSTANCE_IP}:8001").rstrip("/")
+UNITEX_API  = os.environ.get("UNITEX_API_URL",  f"http://{INSTANCE_IP}:8002").rstrip("/")
 POLL_INTERVAL  = float(os.environ.get("POLL_INTERVAL", "3"))
 REMOTE_TIMEOUT = float(os.environ.get("REMOTE_TIMEOUT", "7200"))
 
