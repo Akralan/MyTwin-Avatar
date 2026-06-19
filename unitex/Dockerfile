@@ -37,7 +37,7 @@ RUN pip install transformers diffusers bitsandbytes==0.45 tokenizers \
     && pip install trimesh==3.20.2 pyhocon deepspeed \
     && pip install rembg fpsample triton==3.0.0 open3d xatlas==0.0.10 \
     && pip install gpytoolbox==0.3.3 cupy-cuda12x==13.4.1 \
-    && pip install async-timeout==5.0.1 timeout-decorator==0.5.0 peft==0.15.2 \
+    && pip install async-timeout==5.0.1 timeout-decorator==0.5.0 peft==0.17.0 \
     && pip install jaxtyping==0.3.1 sentencepiece==0.2.0 timm==0.6.13 kornia==0.8.0 \
     && pip install pyexr==0.5.0 imageio==2.37 imageio-ffmpeg==0.4.7
 
