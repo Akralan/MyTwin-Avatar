@@ -99,13 +99,15 @@ else
   fi
   SCULPT_CKPT="$(find_ckpt "$EXP/geneman-geometry-sculpt")"
   [[ -n "$SCULPT_CKPT" ]] || { echo "!! Stage 2 : aucun last.ckpt trouvé"; exit 1; }
-  # Le config sculpt instancie les DEUX prompt processors même à l'export -> il
-  # faut fournir prompt_processor_add.prompt aussi (sinon MissingMandatoryValue).
-  python launch.py --config configs/geneman-geometry-sculpt.yaml --export \
-      tag="$ID" timestamp="$TS" exp_root_dir="$EXP" resume="$SCULPT_CKPT" \
-      data.image_path="$IMG_FG" \
-      system.prompt_processor.prompt="$PROMPT" \
-      system.prompt_processor_add.prompt="$PROMPT" \
+  # Export depuis le config SAUVEGARDÉ par le train (parsed.yaml) : il contient déjà
+  # toutes les valeurs résolues (prompts, chemins normal/depth/keypoints valides dans
+  # le cache, etc.). On n'override que resume + les options d'export. C'est la méthode
+  # de export_mesh.sh du repo -> évite de re-spécifier chaque argument.
+  SCULPT_CFG="$(find "$EXP/geneman-geometry-sculpt" -path '*/configs/parsed.yaml' | head -1)"
+  [[ -n "$SCULPT_CFG" ]] || SCULPT_CFG="$(find "$EXP/geneman-geometry-sculpt" -path '*/configs/*.yaml' | head -1)"
+  [[ -n "$SCULPT_CFG" ]] || { echo "!! Stage 2 : config sauvegardé (parsed.yaml) introuvable"; exit 1; }
+  echo "    export depuis : $SCULPT_CFG"
+  python launch.py --config "$SCULPT_CFG" --export resume="$SCULPT_CKPT" \
       system.exporter_type=mesh-exporter system.exporter.save_texture=False \
       system.exporter.fmt=obj
 fi
