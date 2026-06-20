@@ -51,6 +51,9 @@ ACCESS_CODE = os.environ.get("ACCESS_CODE", "").strip()
 AI_MODEL = os.environ.get("MESHY_AI_MODEL", "latest")
 POSE_MODE = os.environ.get("MESHY_POSE_MODE", "a-pose")
 TARGET_POLYCOUNT = int(os.environ.get("MESHY_TARGET_POLYCOUNT", "30000"))
+# Texture 4K + maps PBR : visage plus net, mais consomment plus de credits.
+HD_TEXTURE = os.environ.get("MESHY_HD_TEXTURE", "0").strip().lower() in ("1", "true", "yes", "on")
+ENABLE_PBR = os.environ.get("MESHY_ENABLE_PBR", "0").strip().lower() in ("1", "true", "yes", "on")
 POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "5"))
 REMOTE_TIMEOUT = float(os.environ.get("REMOTE_TIMEOUT", "1200"))
 
@@ -133,6 +136,12 @@ def _create_task(image_uri: str, enable_texture: bool, enable_apose: bool) -> st
         "target_formats": ["glb"],
         "pose_mode": POSE_MODE if enable_apose else "",
     }
+    # N'envoyer ces options que si la texture est demandee (sinon sans effet).
+    if enable_texture:
+        if HD_TEXTURE:
+            body["hd_texture"] = True
+        if ENABLE_PBR:
+            body["enable_pbr"] = True
     r = requests.post(f"{MESHY_BASE}/image-to-3d", json=body,
                       headers=_headers(), timeout=60)
     r.raise_for_status()
