@@ -2,26 +2,23 @@
 """
 MyTwin Avatar — Web app (Meshy AI) prête pour Scalingo.
 
-Mobile-first : photo -> modèle 3D via l'API Meshy « Image-to-3D », affiché avec
-<model-viewer> (orbite, pinch-zoom, AR sur mobile).
+Réutilise l'interface existante (templates/index.html, three.js) : mêmes routes
+et même forme de réponse que l'app locale. Backend = API Meshy « Image-to-3D ».
 
 Sécurité / protections :
-  - La clé API Meshy reste 100 % côté serveur (jamais envoyée au navigateur).
-  - Rate-limiting par IP sur la génération (protège tes crédits Meshy).
+  - Clé API Meshy 100 % côté serveur (jamais envoyée au navigateur).
+  - Rate-limiting par IP sur /upload (protège tes crédits Meshy).
   - Code d'accès optionnel (ACCESS_CODE) pour réserver l'app à tes clients.
-  - Validation + ré-encodage + redimensionnement des images (Pillow).
-  - Limite de taille d'upload, en-têtes de sécurité (CSP, nosniff, etc.).
+  - Images validées + ré-encodées + redimensionnées (Pillow) ; taille limitée.
+  - En-têtes de sécurité (CSP, nosniff, anti-iframe…). HTTPS auto côté Scalingo.
   - Nettoyage automatique des fichiers générés.
 
-Config (variables d'environnement Scalingo) :
-  MESHY_API_KEY   (obligatoire)  clé API Meshy
-  SECRET_KEY      (recommandé)   secret Flask pour les sessions
-  ACCESS_CODE     (optionnel)    code d'accès partagé ; vide = accès libre
-  MESHY_POSE_MODE (def. a-pose)  pose quand l'option A-pose est active
-  RATE_LIMIT_GENERATE (def. "8 per hour")
-  MAX_UPLOAD_MB   (def. 12)      taille max d'upload
-  MAX_IMAGE_SIDE  (def. 1536)    côté max après redimensionnement
-  MESHY_TARGET_POLYCOUNT (def. 30000), MESHY_AI_MODEL (def. latest)
+Mapping avec l'UI :
+  - case "texture" cochée   -> GLB texturé (tex_files) + OBJ géométrie (ply_files)
+  - case "texture" décochée -> OBJ géométrie (ply_files)
+  - case "A-pose"           -> pose_mode = MESHY_POSE_MODE (def. a-pose)
+
+Variables d'environnement : voir README.md / scalingo.json.
 """
 import os
 import io
@@ -67,12 +64,12 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "/tmp/mytwin_jobs"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXT = {"jpg", "jpeg", "png", "webp", "bmp", "tiff"}
+ALLOWED_FILES = {"model.glb", "model.obj"}
 _HEX = set("0123456789abcdef")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
-# Derrière le routeur Scalingo : récupère la vraie IP cliente (rate-limit correct).
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 limiter = Limiter(get_remote_address, app=app,
@@ -89,7 +86,7 @@ def require_access(view):
     @wraps(view)
     def wrapper(*args, **kwargs):
         if ACCESS_CODE and not session.get("ok"):
-            if request.path.startswith("/api/"):
+            if request.path.startswith(("/upload", "/status", "/output", "/model_status")):
                 return jsonify({"error": "unauthorized"}), 401
             return redirect(url_for("login", next=request.path))
         return view(*args, **kwargs)
@@ -107,7 +104,7 @@ def _prepare_image(file_storage) -> str:
     """Valide, convertit, redimensionne -> data URI JPEG base64."""
     try:
         probe = Image.open(file_storage.stream)
-        probe.verify()                      # rejette les fichiers non-image
+        probe.verify()
     except Exception:
         raise ValueError("Fichier image invalide.")
     file_storage.stream.seek(0)
@@ -128,7 +125,7 @@ def _create_task(image_uri: str, enable_texture: bool, enable_apose: bool) -> st
         "should_texture": bool(enable_texture),
         "should_remesh": True,
         "target_polycount": TARGET_POLYCOUNT,
-        "target_formats": ["glb"],
+        "target_formats": ["glb", "obj"],
         "pose_mode": POSE_MODE if enable_apose else "",
     }
     r = requests.post(f"{MESHY_BASE}/image-to-3d", json=body,
@@ -147,7 +144,7 @@ def _poll(task_id: str, job_id: str) -> dict:
         st = d.get("status")
         with jobs_lock:
             if job_id in jobs:
-                jobs[job_id]["progress"] = d.get("progress", 0)
+                jobs[job_id]["stage"] = f"Meshy : {st} {d.get('progress', 0)}%"
         if st == "SUCCEEDED":
             return d
         if st in ("FAILED", "CANCELED"):
@@ -158,6 +155,7 @@ def _poll(task_id: str, job_id: str) -> dict:
 
 
 def _download(url: str, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
     r = requests.get(url, timeout=180, stream=True)
     r.raise_for_status()
     with open(dest, "wb") as f:
@@ -166,46 +164,76 @@ def _download(url: str, dest: Path) -> None:
 
 
 def _worker(job_id: str, image_uri: str, enable_texture: bool, enable_apose: bool):
+    out_dir = DATA_DIR / job_id
     try:
         with jobs_lock:
             jobs[job_id]["status"] = "processing"
         task_id = _create_task(image_uri, enable_texture, enable_apose)
         data = _poll(task_id, job_id)
-        glb = (data.get("model_urls") or {}).get("glb")
-        if not glb:
-            raise RuntimeError("Aucun modèle GLB renvoyé.")
-        _download(glb, DATA_DIR / f"{job_id}.glb")
+        urls = data.get("model_urls", {}) or {}
+        glb_url, obj_url = urls.get("glb"), urls.get("obj")
+        if not (glb_url or obj_url):
+            raise RuntimeError("Aucun modèle renvoyé.")
+
+        ply_files, tex_files = [], []
+        if enable_texture:
+            # Texturé : GLB affiché (tex_files) + OBJ pour la "jauge personne" (ply_files)
+            if glb_url:
+                _download(glb_url, out_dir / "model.glb")
+                tex_files = [f"/output/{job_id}/model.glb"]
+            if obj_url:
+                _download(obj_url, out_dir / "model.obj")
+                ply_files = [f"/output/{job_id}/model.obj"]
+            elif glb_url:
+                ply_files = [f"/output/{job_id}/model.glb"]
+        else:
+            if obj_url:
+                _download(obj_url, out_dir / "model.obj")
+                ply_files = [f"/output/{job_id}/model.obj"]
+            else:
+                _download(glb_url, out_dir / "model.glb")
+                ply_files = [f"/output/{job_id}/model.glb"]
+
         with jobs_lock:
-            jobs[job_id].update(status="done", progress=100,
-                                model_url=f"/api/model/{job_id}.glb")
+            jobs[job_id].update({
+                "status": "done", "stage": "terminé",
+                "ply_files": ply_files, "glb_files": [], "pose_files": [],
+                "tex_files": tex_files, "person_count": 1,
+            })
     except requests.HTTPError as exc:
         code = getattr(exc.response, "status_code", "?")
         log.warning("job %s HTTP %s: %s", job_id, code,
                     getattr(exc.response, "text", "")[:200])
-        # Message générique (on ne fuite pas les détails de l'API au client).
         with jobs_lock:
-            jobs[job_id].update(status="error",
+            jobs[job_id].update(status="error", ply_files=[],
                                 error="Le service de génération a renvoyé une erreur.")
     except Exception as exc:
         log.warning("job %s: %s", job_id, exc)
         with jobs_lock:
-            jobs[job_id].update(status="error", error="La génération a échoué.")
+            jobs[job_id].update(status="error", ply_files=[],
+                                error="La génération a échoué.")
 
 
 def _cleanup():
     now = time.time()
     with jobs_lock:
         stale = [j for j, v in jobs.items() if now - v.get("created", now) > JOB_TTL]
-        for j in stale:
+    for j in stale:
+        with jobs_lock:
             jobs.pop(j, None)
+        for name in ALLOWED_FILES:
             try:
-                (DATA_DIR / f"{j}.glb").unlink()
+                (DATA_DIR / j / name).unlink()
             except OSError:
                 pass
+        try:
+            (DATA_DIR / j).rmdir()
+        except OSError:
+            pass
 
 
 # --------------------------------------------------------------------------- #
-#  Routes
+#  Routes (mêmes que l'app locale)
 # --------------------------------------------------------------------------- #
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -227,10 +255,18 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/generate", methods=["POST"])
+@app.route("/model_status")
+@require_access
+def model_status():
+    if not MESHY_API_KEY:
+        return jsonify({"ready": False, "error": "Service non configuré (clé API manquante)."})
+    return jsonify({"ready": True, "error": None})
+
+
+@app.route("/upload", methods=["POST"])
 @require_access
 @limiter.limit(RATE_LIMIT_GENERATE)
-def generate():
+def upload():
     if not MESHY_API_KEY:
         return jsonify({"error": "Service non configuré."}), 503
     if "image" not in request.files or not request.files["image"].filename:
@@ -239,46 +275,47 @@ def generate():
     f = request.files["image"]
     ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
     if ext not in ALLOWED_EXT:
-        return jsonify({"error": "Format non supporté (JPG, PNG, WEBP…)."}), 400
+        return jsonify({"error": f"Format non supporté : {ext}"}), 400
     try:
         image_uri = _prepare_image(f)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    truthy = ("1", "true", "on", "yes")
-    enable_texture = request.form.get("texture", "0").lower() in truthy
-    enable_apose = request.form.get("apose", "1").lower() in truthy
+    truthy = ("1", "true", "on", "yes", "True")
+    enable_texture = request.form.get("texture", "0") in truthy
+    enable_apose = request.form.get("apose", "1") in truthy
 
     _cleanup()
     job_id = uuid.uuid4().hex
     with jobs_lock:
-        jobs[job_id] = {"status": "queued", "progress": 0, "error": None,
-                        "model_url": None, "created": time.time()}
+        jobs[job_id] = {"status": "queued", "ply_files": [], "glb_files": [],
+                        "pose_files": [], "tex_files": [], "person_count": 0,
+                        "error": None, "created": time.time()}
     threading.Thread(target=_worker,
                      args=(job_id, image_uri, enable_texture, enable_apose),
                      daemon=True).start()
     return jsonify({"job_id": job_id})
 
 
-@app.route("/api/status/<job_id>")
+@app.route("/status/<job_id>")
 @require_access
 def status(job_id):
     with jobs_lock:
-        j = jobs.get(job_id)
-    if not j:
+        job = jobs.get(job_id)
+    if not job:
         return jsonify({"error": "Job introuvable."}), 404
-    return jsonify({k: j[k] for k in ("status", "progress", "error", "model_url")})
+    return jsonify(job)
 
 
-@app.route("/api/model/<job_id>.glb")
+@app.route("/output/<job_id>/<path:filename>")
 @require_access
-def model(job_id):
-    if len(job_id) != 32 or any(c not in _HEX for c in job_id):
-        abort(404)                          # anti path-traversal
-    if not (DATA_DIR / f"{job_id}.glb").exists():
+def serve_output(job_id, filename):
+    if len(job_id) != 32 or any(c not in _HEX for c in job_id) or filename not in ALLOWED_FILES:
         abort(404)
-    return send_from_directory(DATA_DIR, f"{job_id}.glb",
-                               mimetype="model/gltf-binary", max_age=3600)
+    directory = DATA_DIR / job_id
+    if not (directory / filename).exists():
+        abort(404)
+    return send_from_directory(directory, filename, max_age=3600)
 
 
 @app.route("/healthz")
@@ -287,7 +324,7 @@ def healthz():
 
 
 # --------------------------------------------------------------------------- #
-#  En-têtes de sécurité + gestion d'erreurs
+#  En-têtes de sécurité + erreurs
 # --------------------------------------------------------------------------- #
 @app.after_request
 def security_headers(resp):
@@ -297,11 +334,11 @@ def security_headers(resp):
     resp.headers["Permissions-Policy"] = "camera=(self), geolocation=()"
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; base-uri 'self'; form-action 'self'; "
-        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data: blob:; "
-        "connect-src 'self' https://unpkg.com https://www.gstatic.com; "
+        "connect-src 'self' https://cdn.jsdelivr.net; "
         "worker-src 'self' blob:; frame-ancestors 'self'"
     )
     return resp
