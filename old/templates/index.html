@@ -541,19 +541,7 @@
     <div class="toast-title">Paramètres</div>
     <div class="toast-row">
       <div>
-        <div class="lbl">Générer le rig</div>
-        <div class="desc">Exporte aussi un <strong>.glb</strong> riggé (squelette + skin), animable dans Blender. Ajoute quelques secondes.</div>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="rig-toggle" />
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="toast-sep"></div>
-    <div class="toast-row">
-      <div>
         <div class="lbl">Texturer le modèle</div>
-        <div class="desc">Génère une <strong>texture</strong> (Paint3D) depuis la photo et l'affiche sur le mesh. Lent : plusieurs minutes. Désactive le rig.</div>
       </div>
       <label class="switch">
         <input type="checkbox" id="tex-toggle" />
@@ -598,15 +586,6 @@
     <div id="status-bar"></div>
     <div id="person-selector"></div>
 
-    <div class="tips">
-      <div class="tips-label">Comment ça marche</div>
-      <ul>
-        <li><span class="tip-dot"></span>Importez une photo avec une personne visible</li>
-        <li><span class="tip-dot"></span>L'IA reconstruit un maillage 3D du corps</li>
-        <li><span class="tip-dot"></span>Explorez le résultat dans le viewer interactif</li>
-        <li><span class="tip-dot"></span>Téléchargez le .ply pour Blender ou MeshLab</li>
-      </ul>
-    </div>
   </div>
 
   <!-- RIGHT -->
@@ -837,7 +816,6 @@ const emptyState     = document.getElementById('empty-state');
 const modelStatus    = document.getElementById('model-status');
 const settingsBtn    = document.getElementById('settings-btn');
 const settingsToast  = document.getElementById('settings-toast');
-const rigToggle      = document.getElementById('rig-toggle');
 const texToggle      = document.getElementById('tex-toggle');
 const dlGlb          = document.getElementById('dl-glb');
 
@@ -850,10 +828,6 @@ document.addEventListener('click', e => {
   if (!settingsToast.contains(e.target) && !settingsBtn.contains(e.target))
     settingsToast.classList.remove('visible');
 });
-
-// Rig et texture sont mutuellement exclusifs : activer l'un désactive l'autre.
-rigToggle.addEventListener('change', () => { if (rigToggle.checked) texToggle.checked = false; });
-texToggle.addEventListener('change', () => { if (texToggle.checked) rigToggle.checked = false; });
 
 function setGlb(idx) {
   if (glbFiles[idx]) {
@@ -965,7 +939,7 @@ async function handleFile(file) {
 
   const fd = new FormData();
   fd.append('image', file);
-  fd.append('rig', rigToggle.checked ? '1' : '0');
+  fd.append('rig', '0');
   fd.append('texture', texToggle.checked ? '1' : '0');
 
   let jobId;
