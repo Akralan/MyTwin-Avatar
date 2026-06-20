@@ -43,10 +43,12 @@ fi
 IMG_FG="$DATA/${ID}_fg.png"
 NORMAL="$DATA/${ID}_normal.png"
 KPTS="$DATA/${ID}_landmarks.npy"
-# tr ',' ' ' : OmegaConf.from_cli interprète les virgules comme des séparateurs de
-# liste -> une virgule dans le prompt casse l'affectation. On les retire.
-PROMPT="$(cut -d'|' -f1 < "$DATA/${ID}_caption.txt" | tr ',' ' ')"
-echo "    prompt: $PROMPT"
+# Sanitize : on ne garde QUE lettres/chiffres/espaces. Tout autre caractère
+# (virgule, retour chariot \r, deux-points, guillemet, etc.) est remplacé par un
+# espace, puis on compresse/trim. Ça évite que la caption BLIP2 casse le parsing
+# OmegaConf.from_cli (qui découpe la valeur sur certains caractères) ou le shell.
+PROMPT="$(cut -d'|' -f1 < "$DATA/${ID}_caption.txt" | tr -c '[:alnum:]' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
+echo "    prompt: [$PROMPT]"
 
 # ----------------------------------------------------------- Stage 1 (géométrie)
 if [[ -n "$(find_obj "$EXP/geneman-geometry-init")" ]]; then
