@@ -77,44 +77,47 @@ fi
 MESH_INIT="$(find_obj "$EXP/geneman-geometry-init")"
 [[ -n "$MESH_INIT" ]] || { echo "!! Stage 1 : aucun mesh exporté"; exit 1; }
 
-# ------------------------------------------------------------- Stage 2 (sculpt)
-if [[ -n "$(find_obj "$EXP/geneman-geometry-sculpt")" ]]; then
-  echo "==> [3/3] Stage 2 déjà fait (mesh final en cache), skip."
+# ------------------------------------------------------ Stage 2 (sculpt) : TRAIN
+# Le TRAIN (long) est mis en cache via son checkpoint. L'EXPORT (rapide) est
+# toujours rejoué -> on peut changer la résolution sans ré-entraîner.
+echo "==> [3/3] Stage 2 — sculpting géométrie"
+if [[ -n "$(find_ckpt "$EXP/geneman-geometry-sculpt")" ]]; then
+  echo "    train déjà fait (ckpt en cache), skip."
 else
-  echo "==> [3/3] Stage 2 — sculpting géométrie"
-  if [[ -z "$(find_ckpt "$EXP/geneman-geometry-sculpt")" ]]; then
-    SCULPT_ARGS=(
-      --config configs/geneman-geometry-sculpt.yaml --train
-      tag="$ID" timestamp="$TS" exp_root_dir="$EXP" data.sampling_type=full_body
-      data.image_path="$IMG_FG" data.normal_path="$NORMAL" data.keypoints_path="$KPTS"
-      system.prompt_processor.prompt="$PROMPT black background normal map"
-      system.prompt_processor_add.prompt="$PROMPT black background depth map"
-      system.prompt_processor.human_part_prompt=false
-      system.geometry.shape_init="mesh:$MESH_INIT"
-    )
-    echo "=== [debug] arguments réels passés à launch.py (1 ligne = 1 argv) ==="
-    printf '    <%s>\n' "${SCULPT_ARGS[@]}"
-    python launch.py "${SCULPT_ARGS[@]}" \
-        || echo "[warn] phase test post-entraînement Stage 2 échouée (non bloquant)"
-  fi
-  SCULPT_CKPT="$(find_ckpt "$EXP/geneman-geometry-sculpt")"
-  [[ -n "$SCULPT_CKPT" ]] || { echo "!! Stage 2 : aucun last.ckpt trouvé"; exit 1; }
-  # Export depuis le config SAUVEGARDÉ par le train (parsed.yaml) : il contient déjà
-  # toutes les valeurs résolues (prompts, chemins normal/depth/keypoints valides dans
-  # le cache, etc.). On n'override que resume + les options d'export. C'est la méthode
-  # de export_mesh.sh du repo -> évite de re-spécifier chaque argument.
-  SCULPT_CFG="$(find "$EXP/geneman-geometry-sculpt" -path '*/configs/parsed.yaml' | head -1)"
-  [[ -n "$SCULPT_CFG" ]] || SCULPT_CFG="$(find "$EXP/geneman-geometry-sculpt" -path '*/configs/*.yaml' | head -1)"
-  [[ -n "$SCULPT_CFG" ]] || { echo "!! Stage 2 : config sauvegardé (parsed.yaml) introuvable"; exit 1; }
-  echo "    export depuis : $SCULPT_CFG"
-  # use_sdf_loss=false : sinon geometry.isosurface() renvoie (mesh, sdf_loss) au lieu
-  #   du Mesh seul -> 'tuple' object has no attribute 'unwrap_uv'.
-  # save_uv/save_texture=False : on veut la géométrie seule (la texture = UniTEX).
-  python launch.py --config "$SCULPT_CFG" --export resume="$SCULPT_CKPT" \
-      system.exporter_type=mesh-exporter system.exporter.fmt=obj \
-      system.exporter.save_texture=False system.exporter.save_uv=False \
-      system.geometry.use_sdf_loss=false
+  SCULPT_ARGS=(
+    --config configs/geneman-geometry-sculpt.yaml --train
+    tag="$ID" timestamp="$TS" exp_root_dir="$EXP" data.sampling_type=full_body
+    data.image_path="$IMG_FG" data.normal_path="$NORMAL" data.keypoints_path="$KPTS"
+    system.prompt_processor.prompt="$PROMPT black background normal map"
+    system.prompt_processor_add.prompt="$PROMPT black background depth map"
+    system.prompt_processor.human_part_prompt=false
+    system.geometry.shape_init="mesh:$MESH_INIT"
+  )
+  python launch.py "${SCULPT_ARGS[@]}" \
+      || echo "[warn] phase test post-entraînement Stage 2 échouée (non bloquant)"
 fi
+
+SCULPT_CKPT="$(find_ckpt "$EXP/geneman-geometry-sculpt")"
+[[ -n "$SCULPT_CKPT" ]] || { echo "!! Stage 2 : aucun last.ckpt trouvé"; exit 1; }
+
+# ----------------------------------------------------- Stage 2 (sculpt) : EXPORT
+# Export depuis le config SAUVEGARDÉ par le train (parsed.yaml : toutes les valeurs
+# résolues -> pas besoin de re-spécifier prompts/chemins). On override seulement
+# resume + les options d'export.
+#   use_sdf_loss=false       : sinon isosurface() renvoie (mesh, sdf_loss) -> tuple.
+#   save_uv/save_texture=False : géométrie seule (la texture = UniTEX).
+#   isosurface_resolution    : densité du mesh. 1024 (def.) > 512 d'origine = plus fin.
+#                              Réglable via GENEMAN_ISO_RES (256/512/1024/2048…).
+ISO="${GENEMAN_ISO_RES:-1024}"
+SCULPT_CFG="$(find "$EXP/geneman-geometry-sculpt" -path '*/configs/parsed.yaml' | head -1)"
+[[ -n "$SCULPT_CFG" ]] || SCULPT_CFG="$(find "$EXP/geneman-geometry-sculpt" -path '*/configs/*.yaml' | head -1)"
+[[ -n "$SCULPT_CFG" ]] || { echo "!! Stage 2 : config sauvegardé (parsed.yaml) introuvable"; exit 1; }
+echo "    export (isosurface_resolution=$ISO) depuis : $SCULPT_CFG"
+python launch.py --config "$SCULPT_CFG" --export resume="$SCULPT_CKPT" \
+    system.exporter_type=mesh-exporter system.exporter.fmt=obj \
+    system.exporter.save_texture=False system.exporter.save_uv=False \
+    system.geometry.use_sdf_loss=false \
+    system.geometry.isosurface_resolution="$ISO"
 
 echo "==> Récupération du mesh final"
 mkdir -p "$OUT"
