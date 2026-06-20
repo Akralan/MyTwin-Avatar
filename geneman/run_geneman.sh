@@ -83,13 +83,18 @@ if [[ -n "$(find_obj "$EXP/geneman-geometry-sculpt")" ]]; then
 else
   echo "==> [3/3] Stage 2 — sculpting géométrie"
   if [[ -z "$(find_ckpt "$EXP/geneman-geometry-sculpt")" ]]; then
-    python launch.py --config configs/geneman-geometry-sculpt.yaml --train \
-        tag="$ID" timestamp="$TS" exp_root_dir="$EXP" data.sampling_type="full_body" \
-        data.image_path="$IMG_FG" data.normal_path="$NORMAL" data.keypoints_path="$KPTS" \
-        system.prompt_processor.prompt="$PROMPT black background normal map" \
-        system.prompt_processor_add.prompt="$PROMPT black background depth map" \
-        system.prompt_processor.human_part_prompt=false \
-        system.geometry.shape_init="mesh:$MESH_INIT" \
+    SCULPT_ARGS=(
+      --config configs/geneman-geometry-sculpt.yaml --train
+      tag="$ID" timestamp="$TS" exp_root_dir="$EXP" data.sampling_type=full_body
+      data.image_path="$IMG_FG" data.normal_path="$NORMAL" data.keypoints_path="$KPTS"
+      system.prompt_processor.prompt="$PROMPT black background normal map"
+      system.prompt_processor_add.prompt="$PROMPT black background depth map"
+      system.prompt_processor.human_part_prompt=false
+      system.geometry.shape_init="mesh:$MESH_INIT"
+    )
+    echo "=== [debug] arguments réels passés à launch.py (1 ligne = 1 argv) ==="
+    printf '    <%s>\n' "${SCULPT_ARGS[@]}"
+    python launch.py "${SCULPT_ARGS[@]}" \
         || echo "[warn] phase test post-entraînement Stage 2 échouée (non bloquant)"
   fi
   SCULPT_CKPT="$(find_ckpt "$EXP/geneman-geometry-sculpt")"
