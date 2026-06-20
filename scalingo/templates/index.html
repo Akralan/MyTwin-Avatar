@@ -155,14 +155,14 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
             </svg>
           </div>
-          <h2>Ajouter une photo</h2>
-          <p>Personne de plein pied · JPG, PNG, WEBP</p>
-          <button class="pill" type="button" id="browse">Choisir une photo</button>
+          <h2>Ajouter vos photos</h2>
+          <p>1 à 4 vues de la même personne (face, profil, dos) · JPG, PNG, WEBP</p>
+          <button class="pill" type="button" id="browse">Choisir des photos</button>
         </div>
-        <input type="file" id="file" accept="image/*" />
+        <input type="file" id="file" accept="image/*" multiple />
       </div>
 
-      <div class="hint">La génération démarre automatiquement après l'ajout de la photo (1 à 2 min).</div>
+      <div class="hint">Sélectionnez vos photos en une fois ; la génération démarre automatiquement (1 à 2 min).</div>
     </section>
 
     <!-- ── ÉTAPE 2 : progression ── -->
@@ -194,7 +194,8 @@
           tex=$('#tex'), apose=$('#apose'),
           banner=$('#banner'), mv=$('#mv'), pill=$('#status-pill');
     const screens={upload:$('#s-upload'),progress:$('#s-progress'),result:$('#s-result')};
-    let chosen=null, timer=null;
+    const MAX_IMAGES=4;
+    let chosen=[], timer=null;
 
     const show=n=>{for(const k in screens)screens[k].classList.toggle('active',k===n);
       window.scrollTo({top:0,behavior:'smooth'});};
@@ -208,27 +209,29 @@
       else{pill.className='off';pill.textContent='Indisponible';err(d.error||'Service indisponible.');}
     }).catch(()=>{pill.className='off';pill.textContent='Hors ligne';});
 
-    // Choix d'une image -> génération automatique
-    function pickFile(f){
-      if(!f) return;
-      if(!f.type.startsWith('image/')){err('Veuillez choisir une image.');return;}
-      chosen=f; clearErr();
-      $('#pthumb').src=URL.createObjectURL(f);
+    // Choix des images (1 à 4) -> génération automatique
+    function pickFiles(fileList){
+      let imgs=Array.from(fileList||[]).filter(f=>f.type.startsWith('image/'));
+      if(!imgs.length){err('Veuillez choisir au moins une image.');return;}
+      if(imgs.length>MAX_IMAGES){err(`Maximum ${MAX_IMAGES} photos ; seules les ${MAX_IMAGES} premières sont gardées.`);imgs=imgs.slice(0,MAX_IMAGES);}
+      else clearErr();
+      chosen=imgs;
+      $('#pthumb').src=URL.createObjectURL(imgs[0]);
       generate();
     }
     browse.addEventListener('click',e=>{e.stopPropagation();file.click();});
     drop.addEventListener('click',()=>file.click());
     drop.addEventListener('keydown',e=>{if(e.key==='Enter')file.click();});
-    file.addEventListener('change',e=>pickFile(e.target.files[0]));
+    file.addEventListener('change',e=>pickFiles(e.target.files));
     drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
     drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
-    drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag');pickFile(e.dataTransfer.files[0]);});
+    drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag');pickFiles(e.dataTransfer.files);});
 
     async function generate(){
-      if(!chosen) return;
-      clearErr(); show('progress'); setProg(5,'Envoi de la photo…');
+      if(!chosen.length) return;
+      show('progress'); setProg(5, chosen.length>1?`Envoi de ${chosen.length} photos…`:'Envoi de la photo…');
       const fd=new FormData();
-      fd.append('image',chosen);
+      chosen.forEach(f=>fd.append('image',f));
       fd.append('texture',tex.checked?'1':'0');
       fd.append('apose',apose.checked?'1':'0');
       try{
@@ -260,7 +263,7 @@
     }
 
     $('#again').addEventListener('click',()=>{
-      chosen=null; file.value=''; mv.src=''; clearErr(); show('upload');
+      chosen=[]; file.value=''; mv.src=''; clearErr(); show('upload');
     });
   </script>
 </body>

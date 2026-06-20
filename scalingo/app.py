@@ -55,6 +55,7 @@ POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "5"))
 REMOTE_TIMEOUT = float(os.environ.get("REMOTE_TIMEOUT", "1200"))
 
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "12"))
+MAX_IMAGES = int(os.environ.get("MAX_IMAGES", "4"))  # Meshy multi-image : 1 à 4
 MAX_IMAGE_SIDE = int(os.environ.get("MAX_IMAGE_SIDE", "1536"))
 RATE_LIMIT_GENERATE = os.environ.get("RATE_LIMIT_GENERATE", "8 per hour")
 JOB_TTL = int(os.environ.get("JOB_TTL", "86400"))   # cache 24 h par défaut
@@ -68,7 +69,7 @@ _HEX = set("0123456789abcdef")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
-app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * MAX_IMAGES * 1024 * 1024
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 limiter = Limiter(get_remote_address, app=app,
@@ -118,14 +119,14 @@ def _prepare_image(file_storage) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def _cache_key(image_uri: str, texture: bool, apose: bool) -> str:
-    h = hashlib.sha256(image_uri.encode("ascii")).hexdigest()
+def _cache_key(image_uris: list, texture: bool, apose: bool) -> str:
+    h = hashlib.sha256("".join(image_uris).encode("ascii")).hexdigest()
     return f"{h}:{int(texture)}:{int(apose)}"
 
 
-def _create_task(image_uri: str, enable_texture: bool, enable_apose: bool) -> str:
+def _create_task(image_uris: list, enable_texture: bool, enable_apose: bool) -> str:
     body = {
-        "image_url": image_uri,
+        "image_urls": list(image_uris),
         "ai_model": AI_MODEL,
         "should_texture": bool(enable_texture),
         "should_remesh": True,
@@ -133,7 +134,7 @@ def _create_task(image_uri: str, enable_texture: bool, enable_apose: bool) -> st
         "target_formats": ["glb"],
         "pose_mode": POSE_MODE if enable_apose else "",
     }
-    r = requests.post(f"{MESHY_BASE}/image-to-3d", json=body,
+    r = requests.post(f"{MESHY_BASE}/multi-image-to-3d", json=body,
                       headers=_headers(), timeout=60)
     r.raise_for_status()
     return r.json()["result"]
@@ -142,7 +143,7 @@ def _create_task(image_uri: str, enable_texture: bool, enable_apose: bool) -> st
 def _poll(task_id: str, job_id: str) -> dict:
     deadline = time.time() + REMOTE_TIMEOUT
     while time.time() < deadline:
-        r = requests.get(f"{MESHY_BASE}/image-to-3d/{task_id}",
+        r = requests.get(f"{MESHY_BASE}/multi-image-to-3d/{task_id}",
                          headers=_headers(), timeout=30)
         r.raise_for_status()
         d = r.json()
@@ -168,11 +169,11 @@ def _download(url: str, dest: Path) -> None:
             f.write(chunk)
 
 
-def _worker(job_id, image_uri, enable_texture, enable_apose, cache_key):
+def _worker(job_id, image_uris, enable_texture, enable_apose, cache_key):
     try:
         with jobs_lock:
             jobs[job_id]["status"] = "processing"
-        task_id = _create_task(image_uri, enable_texture, enable_apose)
+        task_id = _create_task(image_uris, enable_texture, enable_apose)
         log.info("meshy task %s (should_texture=%s) for job %s", task_id, enable_texture, job_id)
         data = _poll(task_id, job_id)
         glb = (data.get("model_urls") or {}).get("glb")
@@ -253,26 +254,30 @@ def model_status():
 def upload():
     if not MESHY_API_KEY:
         return jsonify({"error": "Service non configuré."}), 503
-    if "image" not in request.files or not request.files["image"].filename:
+    files = [f for f in request.files.getlist("image") if f and f.filename]
+    if not files:
         return jsonify({"error": "Aucune image fournie."}), 400
+    if len(files) > MAX_IMAGES:
+        return jsonify({"error": f"Maximum {MAX_IMAGES} images."}), 400
 
-    f = request.files["image"]
-    ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
-    if ext not in ALLOWED_EXT:
-        return jsonify({"error": f"Format non supporté : {ext}"}), 400
-    try:
-        image_uri = _prepare_image(f)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    image_uris = []
+    for f in files:
+        ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+        if ext not in ALLOWED_EXT:
+            return jsonify({"error": f"Format non supporté : {ext}"}), 400
+        try:
+            image_uris.append(_prepare_image(f))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     truthy = ("1", "true", "on", "yes", "True")
     enable_texture = request.form.get("texture", "0") in truthy
     enable_apose = request.form.get("apose", "1") in truthy
 
-    log.info("upload: texture=%s apose=%s", enable_texture, enable_apose)
+    log.info("upload: images=%d texture=%s apose=%s", len(image_uris), enable_texture, enable_apose)
 
-    # --- Cache : même image + mêmes options -> on réutilise le modèle existant ---
-    key = _cache_key(image_uri, enable_texture, enable_apose)
+    # --- Cache : mêmes images + mêmes options -> on réutilise le modèle existant ---
+    key = _cache_key(image_uris, enable_texture, enable_apose)
     with jobs_lock:
         cached = results_cache.get(key)
         if (cached and cached in jobs and jobs[cached].get("status") == "done"
@@ -287,7 +292,7 @@ def upload():
                         "pose_files": [], "tex_files": [], "person_count": 0,
                         "error": None, "created": time.time()}
     threading.Thread(target=_worker,
-                     args=(job_id, image_uri, enable_texture, enable_apose, key),
+                     args=(job_id, image_uris, enable_texture, enable_apose, key),
                      daemon=True).start()
     return jsonify({"job_id": job_id})
 
