@@ -35,9 +35,13 @@ PROMPT="$(cut -d'|' -f1 < "$DATA/${ID}_caption.txt")"
 echo "    prompt: $PROMPT"
 
 echo "==> [2/3] Stage 1 — initialisation géométrie (NeRF)"
+# Le `|| true` tolère le crash de la phase de TEST post-entraînement (rendu
+# d'aperçus décoratifs, IndexError sur image vide) : le last.ckpt est déjà
+# sauvegardé à la fin du fit. On vérifie sa présence juste après.
 python launch.py --config configs/geneman-geometry-init.yaml --train \
     tag="$ID" timestamp="$TS" exp_root_dir="$EXP" \
-    data.image_path="$IMG_FG" system.prompt_processor.prompt="$PROMPT"
+    data.image_path="$IMG_FG" system.prompt_processor.prompt="$PROMPT" \
+    || echo "[warn] phase test post-entraînement Stage 1 échouée (non bloquant)"
 
 INIT_CKPT="$(find_ckpt "$EXP/geneman-geometry-init")"
 [[ -n "$INIT_CKPT" ]] || { echo "!! Stage 1 : aucun last.ckpt trouvé"; exit 1; }
@@ -59,7 +63,8 @@ python launch.py --config configs/geneman-geometry-sculpt.yaml --train \
     system.prompt_processor.prompt="$PROMPT, black background, normal map" \
     system.prompt_processor_add.prompt="$PROMPT, black background, depth map" \
     system.prompt_processor.human_part_prompt=false \
-    system.geometry.shape_init="mesh:$MESH_INIT"
+    system.geometry.shape_init="mesh:$MESH_INIT" \
+    || echo "[warn] phase test post-entraînement Stage 2 échouée (non bloquant)"
 
 SCULPT_CKPT="$(find_ckpt "$EXP/geneman-geometry-sculpt")"
 [[ -n "$SCULPT_CKPT" ]] || { echo "!! Stage 2 : aucun last.ckpt trouvé"; exit 1; }
