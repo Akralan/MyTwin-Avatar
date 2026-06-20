@@ -124,7 +124,6 @@
 </head>
 <body>
   <header>
-    <div class="logo">M</div>
     <div class="brand"><div class="wordmark">MyTwin</div><div class="sub">AVATAR</div></div>
     <span id="status-pill" class="off">…</span>
   </header>
@@ -132,27 +131,8 @@
   <main>
     <div id="banner"></div>
 
-    <!-- ── ÉTAPE 1 : photo + options ── -->
+    <!-- ── ÉTAPE 1 : options + photo (génération auto à l'ajout) ── -->
     <section id="s-upload" class="screen active">
-      <div>
-        <div class="label">Votre photo</div>
-        <div id="drop" class="card" role="button" tabindex="0">
-          <div class="drop-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
-            </svg>
-          </div>
-          <h2>Ajouter une photo</h2>
-          <p>Personne de plein pied · JPG, PNG, WEBP</p>
-          <button class="pill" type="button" id="browse">Choisir une photo</button>
-        </div>
-        <div id="preview-card" class="card">
-          <img id="preview" alt="" />
-          <button class="change" id="change" type="button">Changer de photo</button>
-        </div>
-        <input type="file" id="file" accept="image/*" />
-      </div>
-
       <div>
         <div class="label">Options</div>
         <div class="card">
@@ -167,8 +147,22 @@
         </div>
       </div>
 
-      <button class="btn" id="go" disabled>Générer en 3D</button>
-      <div class="hint">La génération prend en général 1 à 2 minutes.</div>
+      <div>
+        <div class="label">Votre photo</div>
+        <div id="drop" class="card" role="button" tabindex="0">
+          <div class="drop-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+          </div>
+          <h2>Ajouter une photo</h2>
+          <p>Personne de plein pied · JPG, PNG, WEBP</p>
+          <button class="pill" type="button" id="browse">Choisir une photo</button>
+        </div>
+        <input type="file" id="file" accept="image/*" />
+      </div>
+
+      <div class="hint">La génération démarre automatiquement après l'ajout de la photo (1 à 2 min).</div>
     </section>
 
     <!-- ── ÉTAPE 2 : progression ── -->
@@ -188,10 +182,7 @@
           shadow-intensity="1" exposure="1.05" interaction-prompt="none"
           ar ar-modes="webxr scene-viewer quick-look"></model-viewer>
       </div>
-      <div class="row">
-        <a class="btn" id="dl" download>Télécharger</a>
-        <button class="btn ghost" id="again" type="button">Nouvelle photo</button>
-      </div>
+      <button class="btn ghost" id="again" type="button">Nouvelle photo</button>
     </section>
   </main>
 
@@ -200,10 +191,8 @@
   <script>
     const $=s=>document.querySelector(s);
     const file=$('#file'), drop=$('#drop'), browse=$('#browse'),
-          previewCard=$('#preview-card'), preview=$('#preview'), change=$('#change'),
-          go=$('#go'), tex=$('#tex'), apose=$('#apose'),
-          banner=$('#banner'), mv=$('#mv'), dl=$('#dl'),
-          pill=$('#status-pill');
+          tex=$('#tex'), apose=$('#apose'),
+          banner=$('#banner'), mv=$('#mv'), pill=$('#status-pill');
     const screens={upload:$('#s-upload'),progress:$('#s-progress'),result:$('#s-result')};
     let chosen=null, timer=null;
 
@@ -211,6 +200,7 @@
       window.scrollTo({top:0,behavior:'smooth'});};
     const err=m=>{banner.textContent=m;banner.className='err show';};
     const clearErr=()=>{banner.className='';};
+    const setProg=(p,t)=>{$('#pfill').style.width=Math.max(5,p)+'%';if(t)$('#ptext').textContent=t;};
 
     // état du service
     fetch('/model_status').then(r=>r.json()).then(d=>{
@@ -218,14 +208,13 @@
       else{pill.className='off';pill.textContent='Indisponible';err(d.error||'Service indisponible.');}
     }).catch(()=>{pill.className='off';pill.textContent='Hors ligne';});
 
+    // Choix d'une image -> génération automatique
     function pickFile(f){
       if(!f) return;
       if(!f.type.startsWith('image/')){err('Veuillez choisir une image.');return;}
       chosen=f; clearErr();
-      const url=URL.createObjectURL(f);
-      preview.src=url; $('#pthumb').src=url;
-      drop.style.display='none'; previewCard.classList.add('show');
-      go.disabled=false;
+      $('#pthumb').src=URL.createObjectURL(f);
+      generate();
     }
     browse.addEventListener('click',e=>{e.stopPropagation();file.click();});
     drop.addEventListener('click',()=>file.click());
@@ -234,25 +223,21 @@
     drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
     drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
     drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag');pickFile(e.dataTransfer.files[0]);});
-    change.addEventListener('click',()=>file.click());
 
-    go.addEventListener('click',async()=>{
+    async function generate(){
       if(!chosen) return;
-      clearErr(); go.disabled=true;
+      clearErr(); show('progress'); setProg(5,'Envoi de la photo…');
       const fd=new FormData();
       fd.append('image',chosen);
       fd.append('texture',tex.checked?'1':'0');
       fd.append('apose',apose.checked?'1':'0');
-      show('progress'); setProg(5,'Envoi de la photo…');
       try{
         const r=await fetch('/upload',{method:'POST',body:fd});
         const d=await r.json();
         if(!r.ok) throw new Error(d.error||'Erreur');
         track(d.job_id);
-      }catch(e){show('upload');err(e.message);go.disabled=false;}
-    });
-
-    const setProg=(p,t)=>{$('#pfill').style.width=Math.max(5,p)+'%';if(t)$('#ptext').textContent=t;};
+      }catch(e){show('upload');err(e.message);}
+    }
 
     function track(id){
       timer=setInterval(async()=>{
@@ -264,21 +249,18 @@
           const p=m?parseInt(m[1]):(d.status==='processing'?40:10);
           setProg(p, d.status==='processing'?`Génération du modèle… ${p}%`:'En file d\'attente…');
           if(d.status==='done'){clearInterval(timer);openResult(d);}
-          if(d.status==='error'){clearInterval(timer);show('upload');err(d.error||'Échec');go.disabled=false;}
-        }catch(e){clearInterval(timer);show('upload');err(e.message);go.disabled=false;}
+          if(d.status==='error'){clearInterval(timer);show('upload');err(d.error||'Échec');}
+        }catch(e){clearInterval(timer);show('upload');err(e.message);}
       },3000);
     }
 
     function openResult(d){
       const url=(d.tex_files&&d.tex_files[0])||(d.ply_files&&d.ply_files[0]);
-      mv.src=url; dl.href=url; dl.download='mytwin-avatar'+(url.endsWith('.obj')?'.obj':'.glb');
-      show('result');
+      mv.src=url; show('result');
     }
 
     $('#again').addEventListener('click',()=>{
-      chosen=null; file.value=''; preview.src=''; mv.src='';
-      previewCard.classList.remove('show'); drop.style.display='flex';
-      go.disabled=true; clearErr(); show('upload');
+      chosen=null; file.value=''; mv.src=''; clearErr(); show('upload');
     });
   </script>
 </body>
