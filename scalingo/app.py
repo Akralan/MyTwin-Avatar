@@ -173,6 +173,7 @@ def _worker(job_id, image_uri, enable_texture, enable_apose, cache_key):
         with jobs_lock:
             jobs[job_id]["status"] = "processing"
         task_id = _create_task(image_uri, enable_texture, enable_apose)
+        log.info("meshy task %s (should_texture=%s) for job %s", task_id, enable_texture, job_id)
         data = _poll(task_id, job_id)
         glb = (data.get("model_urls") or {}).get("glb")
         if not glb:
@@ -268,12 +269,15 @@ def upload():
     enable_texture = request.form.get("texture", "0") in truthy
     enable_apose = request.form.get("apose", "1") in truthy
 
+    log.info("upload: texture=%s apose=%s", enable_texture, enable_apose)
+
     # --- Cache : même image + mêmes options -> on réutilise le modèle existant ---
     key = _cache_key(image_uri, enable_texture, enable_apose)
     with jobs_lock:
         cached = results_cache.get(key)
         if (cached and cached in jobs and jobs[cached].get("status") == "done"
                 and (DATA_DIR / cached / "model.glb").exists()):
+            log.info("cache HIT (texture=%s apose=%s) -> %s", enable_texture, enable_apose, cached)
             return jsonify({"job_id": cached, "cached": True})
 
     _cleanup()
@@ -330,7 +334,7 @@ def security_headers(resp):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data: blob:; "
-        "connect-src 'self' https://cdn.jsdelivr.net https://www.gstatic.com; "
+        "connect-src 'self' blob: data: https://cdn.jsdelivr.net https://www.gstatic.com; "
         "worker-src 'self' blob:; frame-ancestors 'self'"
     )
     return resp
