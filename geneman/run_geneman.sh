@@ -31,7 +31,9 @@ python preprocessing.py "$WORK/raw" --output_path "$DATA" --recenter --enable_ca
 IMG_FG="$DATA/${ID}_fg.png"
 NORMAL="$DATA/${ID}_normal.png"
 KPTS="$DATA/${ID}_landmarks.npy"
-PROMPT="$(cut -d'|' -f1 < "$DATA/${ID}_caption.txt")"
+# tr ',' ' ' : OmegaConf.from_cli interprète les virgules comme des séparateurs de
+# liste -> une virgule dans le prompt casse l'affectation. On les retire.
+PROMPT="$(cut -d'|' -f1 < "$DATA/${ID}_caption.txt" | tr ',' ' ')"
 echo "    prompt: $PROMPT"
 
 echo "==> [2/3] Stage 1 — initialisation géométrie (NeRF)"
@@ -60,8 +62,8 @@ echo "==> [3/3] Stage 2 — sculpting géométrie"
 python launch.py --config configs/geneman-geometry-sculpt.yaml --train \
     tag="$ID" timestamp="$TS" exp_root_dir="$EXP" data.sampling_type="full_body" \
     data.image_path="$IMG_FG" data.normal_path="$NORMAL" data.keypoints_path="$KPTS" \
-    system.prompt_processor.prompt="$PROMPT, black background, normal map" \
-    system.prompt_processor_add.prompt="$PROMPT, black background, depth map" \
+    system.prompt_processor.prompt="$PROMPT black background normal map" \
+    system.prompt_processor_add.prompt="$PROMPT black background depth map" \
     system.prompt_processor.human_part_prompt=false \
     system.geometry.shape_init="mesh:$MESH_INIT" \
     || echo "[warn] phase test post-entraînement Stage 2 échouée (non bloquant)"
