@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e0f1a" />
+  <title>MyTwin Avatar — Photo en 3D</title>
+  <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+  <style>
+    :root{
+      --bg:#0e0f1a; --bg2:#161829; --card:#1b1e34; --line:#2a2e4a;
+      --txt:#eef0fb; --muted:#9aa0c4; --accent:#6d5efc; --accent2:#00d4ff;
+      --ok:#22c98a; --err:#ff5d6c; --radius:18px;
+    }
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+    html,body{margin:0; height:100%;}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+      background:radial-gradient(120% 80% at 50% 0%, #1a1d33 0%, var(--bg) 60%);
+      color:var(--txt); min-height:100dvh; display:flex; flex-direction:column;
+    }
+    header{
+      padding:18px 20px calc(14px); display:flex; align-items:center; gap:10px;
+    }
+    .logo{
+      width:30px;height:30px;border-radius:9px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;
+    }
+    header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px;}
+    header span{color:var(--muted);font-size:12px;display:block;font-weight:500;}
+    main{flex:1; padding:8px 16px 28px; max-width:560px; width:100%; margin:0 auto;}
+    .card{
+      background:var(--card); border:1px solid var(--line);
+      border-radius:var(--radius); padding:18px; margin-bottom:16px;
+    }
+    /* Upload */
+    #drop{
+      border:1.5px dashed var(--line); border-radius:14px; padding:30px 16px;
+      text-align:center; cursor:pointer; transition:.2s; background:var(--bg2);
+    }
+    #drop:active{transform:scale(.99);}
+    #drop.has{border-style:solid; padding:0; overflow:hidden;}
+    #drop .icon{font-size:34px; line-height:1;}
+    #drop h2{font-size:16px;margin:12px 0 4px;}
+    #drop p{color:var(--muted);font-size:13px;margin:0;}
+    #preview{width:100%; display:block; max-height:340px; object-fit:contain; background:#000;}
+    input[type=file]{display:none;}
+    /* Options */
+    .opt{display:flex; align-items:center; justify-content:space-between; padding:13px 2px;}
+    .opt + .opt{border-top:1px solid var(--line);}
+    .opt .lbl{font-size:15px;font-weight:600;}
+    .opt .sub{color:var(--muted);font-size:12px;margin-top:2px;}
+    .switch{position:relative; width:48px; height:28px; flex:none;}
+    .switch input{opacity:0; width:0; height:0;}
+    .slider{position:absolute; inset:0; background:var(--line); border-radius:99px; transition:.2s; cursor:pointer;}
+    .slider:before{content:"";position:absolute;width:22px;height:22px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+    .switch input:checked + .slider{background:linear-gradient(135deg,var(--accent),var(--accent2));}
+    .switch input:checked + .slider:before{transform:translateX(20px);}
+    /* Button */
+    .btn{
+      width:100%; border:0; border-radius:14px; padding:16px; font-size:16px;
+      font-weight:700; color:#fff; cursor:pointer;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+    }
+    .btn:disabled{opacity:.5; cursor:not-allowed;}
+    .btn.ghost{background:transparent; border:1px solid var(--line); color:var(--txt);}
+    .btn + .btn{margin-top:10px;}
+    /* Progress */
+    .bar{height:8px;background:var(--bg2);border-radius:99px;overflow:hidden;margin:14px 0 8px;}
+    .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s;}
+    .ptext{text-align:center;color:var(--muted);font-size:13px;}
+    .spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--accent2);border-radius:50%;margin:6px auto 12px;animation:s 1s linear infinite;}
+    @keyframes s{to{transform:rotate(360deg);}}
+    /* Viewer */
+    model-viewer{width:100%; height:60dvh; min-height:360px; background:#0a0b14; border-radius:14px;}
+    /* Banner */
+    .banner{padding:12px 14px;border-radius:12px;font-size:14px;margin-bottom:14px;}
+    .banner.err{background:rgba(255,93,108,.12);color:#ffb3ba;border:1px solid rgba(255,93,108,.3);}
+    .hidden{display:none !important;}
+    .hint{color:var(--muted);font-size:12px;text-align:center;margin-top:14px;}
+    footer{color:var(--muted);font-size:11px;text-align:center;padding:14px;}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">M</div>
+    <div><h1>MyTwin Avatar</h1><span>Votre photo en modèle 3D</span></div>
+  </header>
+
+  <main>
+    <div id="error" class="banner err hidden"></div>
+
+    <!-- ÉTAPE 1 : upload + options -->
+    <section id="step-input">
+      <div class="card">
+        <div id="drop" role="button" tabindex="0">
+          <div class="icon">📷</div>
+          <h2>Ajouter une photo</h2>
+          <p>Personne de plein pied · JPG, PNG, WEBP</p>
+          <img id="preview" class="hidden" alt="" />
+        </div>
+        <input type="file" id="file" accept="image/*" />
+      </div>
+
+      <div class="card">
+        <div class="opt">
+          <div><div class="lbl">Texturer le modèle</div><div class="sub">Couleurs depuis la photo</div></div>
+          <label class="switch"><input type="checkbox" id="tex"><span class="slider"></span></label>
+        </div>
+        <div class="opt">
+          <div><div class="lbl">A-pose</div><div class="sub">Bras écartés (rigging facile)</div></div>
+          <label class="switch"><input type="checkbox" id="apose" checked><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <button class="btn" id="go" disabled>Générer en 3D</button>
+      <div class="hint">La génération prend en général 1 à 2 minutes.</div>
+    </section>
+
+    <!-- ÉTAPE 2 : progression -->
+    <section id="step-progress" class="hidden">
+      <div class="card" style="text-align:center">
+        <div class="spin"></div>
+        <div class="bar"><i id="pfill"></i></div>
+        <div class="ptext" id="ptext">Préparation…</div>
+      </div>
+    </section>
+
+    <!-- ÉTAPE 3 : résultat -->
+    <section id="step-result" class="hidden">
+      <div class="card">
+        <model-viewer id="mv" camera-controls auto-rotate touch-action="pan-y"
+                      shadow-intensity="1" exposure="1" ar ar-modes="webxr scene-viewer quick-look"
+                      interaction-prompt="none"></model-viewer>
+      </div>
+      <a class="btn" id="dl" download>Télécharger le modèle (.glb)</a>
+      <button class="btn ghost" id="again">Nouvelle photo</button>
+    </section>
+  </main>
+
+  <footer>Propulsé par Meshy AI · MyTwin Avatar</footer>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const fileInput=$('#file'), drop=$('#drop'), preview=$('#preview'),
+          go=$('#go'), tex=$('#tex'), apose=$('#apose'),
+          errBox=$('#error'), mv=$('#mv'), dl=$('#dl');
+    const steps={input:$('#step-input'), progress:$('#step-progress'), result:$('#step-result')};
+    let file=null, poll=null;
+
+    function show(step){ for(const k in steps) steps[k].classList.toggle('hidden', k!==step); }
+    function err(m){ errBox.textContent=m; errBox.classList.remove('hidden'); }
+    function clearErr(){ errBox.classList.add('hidden'); }
+
+    drop.addEventListener('click', ()=>fileInput.click());
+    drop.addEventListener('keydown', e=>{ if(e.key==='Enter') fileInput.click(); });
+    fileInput.addEventListener('change', e=>{
+      const f=e.target.files[0]; if(!f) return;
+      if(!f.type.startsWith('image/')){ err('Veuillez choisir une image.'); return; }
+      file=f; clearErr();
+      preview.src=URL.createObjectURL(f);
+      preview.classList.remove('hidden');
+      drop.classList.add('has');
+      drop.querySelector('.icon').classList.add('hidden');
+      drop.querySelector('h2').classList.add('hidden');
+      drop.querySelector('p').classList.add('hidden');
+      go.disabled=false;
+    });
+
+    go.addEventListener('click', async ()=>{
+      if(!file) return;
+      clearErr(); go.disabled=true;
+      const fd=new FormData();
+      fd.append('image', file);
+      fd.append('texture', tex.checked?'1':'0');
+      fd.append('apose', apose.checked?'1':'0');
+      try{
+        const r=await fetch('/api/generate',{method:'POST',body:fd});
+        const d=await r.json();
+        if(!r.ok) throw new Error(d.error||'Erreur');
+        show('progress'); track(d.job_id);
+      }catch(e){ err(e.message); go.disabled=false; }
+    });
+
+    function track(id){
+      $('#pfill').style.width='5%'; $('#ptext').textContent='Envoi de la photo…';
+      poll=setInterval(async ()=>{
+        try{
+          const r=await fetch('/api/status/'+id);
+          const d=await r.json();
+          if(!r.ok) throw new Error(d.error||'Erreur');
+          const p=Math.max(5, d.progress||0);
+          $('#pfill').style.width=p+'%';
+          $('#ptext').textContent = d.status==='processing'
+            ? `Génération du modèle… ${p}%` : 'En file d\'attente…';
+          if(d.status==='done'){ clearInterval(poll); openResult(d.model_url); }
+          if(d.status==='error'){ clearInterval(poll); show('input'); err(d.error||'Échec'); go.disabled=false; }
+        }catch(e){ clearInterval(poll); show('input'); err(e.message); go.disabled=false; }
+      }, 3000);
+    }
+
+    function openResult(url){
+      mv.src=url; dl.href=url; show('result');
+    }
+
+    $('#again').addEventListener('click', ()=>{
+      file=null; fileInput.value=''; preview.src=''; preview.classList.add('hidden');
+      drop.classList.remove('has');
+      drop.querySelector('.icon').classList.remove('hidden');
+      drop.querySelector('h2').classList.remove('hidden');
+      drop.querySelector('p').classList.remove('hidden');
+      go.disabled=true; clearErr(); show('input');
+    });
+  </script>
+</body>
+</html>
