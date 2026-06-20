@@ -99,9 +99,13 @@ else
   fi
   SCULPT_CKPT="$(find_ckpt "$EXP/geneman-geometry-sculpt")"
   [[ -n "$SCULPT_CKPT" ]] || { echo "!! Stage 2 : aucun last.ckpt trouvé"; exit 1; }
+  # Le config sculpt instancie les DEUX prompt processors même à l'export -> il
+  # faut fournir prompt_processor_add.prompt aussi (sinon MissingMandatoryValue).
   python launch.py --config configs/geneman-geometry-sculpt.yaml --export \
       tag="$ID" timestamp="$TS" exp_root_dir="$EXP" resume="$SCULPT_CKPT" \
-      data.image_path="$IMG_FG" system.prompt_processor.prompt="$PROMPT" \
+      data.image_path="$IMG_FG" \
+      system.prompt_processor.prompt="$PROMPT" \
+      system.prompt_processor_add.prompt="$PROMPT" \
       system.exporter_type=mesh-exporter system.exporter.save_texture=False \
       system.exporter.fmt=obj
 fi
