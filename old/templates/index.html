@@ -548,6 +548,16 @@
         <span class="slider"></span>
       </label>
     </div>
+    <div class="toast-sep"></div>
+    <div class="toast-row">
+      <div>
+        <div class="lbl">A-pose</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="apose-toggle" checked />
+        <span class="slider"></span>
+      </label>
+    </div>
   </div>
 </header>
 
@@ -817,6 +827,7 @@ const modelStatus    = document.getElementById('model-status');
 const settingsBtn    = document.getElementById('settings-btn');
 const settingsToast  = document.getElementById('settings-toast');
 const texToggle      = document.getElementById('tex-toggle');
+const aposeToggle    = document.getElementById('apose-toggle');
 const dlGlb          = document.getElementById('dl-glb');
 
 let pollTimer = null;
@@ -940,6 +951,7 @@ async function handleFile(file) {
   const fd = new FormData();
   fd.append('image', file);
   fd.append('rig', '0');
+  fd.append('apose', aposeToggle.checked ? '1' : '0');
   fd.append('texture', texToggle.checked ? '1' : '0');
 
   let jobId;
