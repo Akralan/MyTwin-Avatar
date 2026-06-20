@@ -107,9 +107,13 @@ else
   [[ -n "$SCULPT_CFG" ]] || SCULPT_CFG="$(find "$EXP/geneman-geometry-sculpt" -path '*/configs/*.yaml' | head -1)"
   [[ -n "$SCULPT_CFG" ]] || { echo "!! Stage 2 : config sauvegardé (parsed.yaml) introuvable"; exit 1; }
   echo "    export depuis : $SCULPT_CFG"
+  # use_sdf_loss=false : sinon geometry.isosurface() renvoie (mesh, sdf_loss) au lieu
+  #   du Mesh seul -> 'tuple' object has no attribute 'unwrap_uv'.
+  # save_uv/save_texture=False : on veut la géométrie seule (la texture = UniTEX).
   python launch.py --config "$SCULPT_CFG" --export resume="$SCULPT_CKPT" \
-      system.exporter_type=mesh-exporter system.exporter.save_texture=False \
-      system.exporter.fmt=obj
+      system.exporter_type=mesh-exporter system.exporter.fmt=obj \
+      system.exporter.save_texture=False system.exporter.save_uv=False \
+      system.geometry.use_sdf_loss=false
 fi
 
 echo "==> Récupération du mesh final"
