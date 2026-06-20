@@ -666,6 +666,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -735,6 +736,8 @@ function frameObject(obj) {
 }
 
 window.loadPLY = function(url) {
+  // GeneMAN exporte du .obj (pas du .ply) -> on aiguille vers OBJLoader si besoin.
+  if (url.split('?')[0].toLowerCase().endsWith('.obj')) return loadOBJ(url);
   document.getElementById('empty-state').classList.add('hidden');
   const loader = new PLYLoader();
   loader.load(url, (geometry) => {
@@ -755,6 +758,31 @@ window.loadPLY = function(url) {
     document.getElementById('dl-link').href     = url;
     document.getElementById('dl-link').download = url.split('/').pop();
     document.getElementById('dl-label').textContent = 'Télécharger le .ply';
+  });
+};
+
+// Charge un .obj (mesh géométrie GeneMAN) — matériau neutre, normales lissées.
+window.loadOBJ = function(url) {
+  document.getElementById('empty-state').classList.add('hidden');
+  const loader = new OBJLoader();
+  loader.load(url, (obj) => {
+    disposeCurrent();
+    obj.traverse(o => {
+      if (o.isMesh) {
+        o.geometry.computeVertexNormals();
+        o.material = new THREE.MeshStandardMaterial({
+          color: 0xa8c8d8, roughness: 0.5, metalness: 0.05,
+        });
+      }
+    });
+    currentMesh = obj;
+    frameObject(currentMesh);
+    scene.add(currentMesh);
+    document.getElementById('controls-hint').classList.add('visible');
+    document.getElementById('download-bar').classList.add('visible');
+    document.getElementById('dl-link').href     = url;
+    document.getElementById('dl-link').download = url.split('/').pop();
+    document.getElementById('dl-label').textContent = 'Télécharger le .obj';
   });
 };
 
