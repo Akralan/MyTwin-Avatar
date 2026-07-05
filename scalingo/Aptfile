@@ -1,0 +1,3 @@
+# Libs système requises par opencv (tiré par mediapipe) au runtime.
+libgl1
+libglib2.0-0

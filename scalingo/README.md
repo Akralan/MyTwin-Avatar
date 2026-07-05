@@ -49,7 +49,12 @@ git subtree push --prefix scalingo scalingo master
 | `MESHY_POSE_MODE` | `a-pose` | pose quand l'option A-pose est active |
 | `RATE_LIMIT_GENERATE` | `8 per hour` | quota de génération par IP |
 | `MAX_UPLOAD_MB` | `12` | taille max d'upload |
-| `MESHY_TARGET_POLYCOUNT` | `30000` | densité du mesh |
+| `MESHY_TARGET_POLYCOUNT` | `30000` | densité du mesh (seulement si `MESHY_SHOULD_REMESH=1`) |
+| `MESHY_SHOULD_REMESH` | `0` | `0` = maillage haute précision (qualité web app) ; `1` = mesh allégé (AR/rigging) |
+| `MESHY_ENABLE_PBR` | `1` | maps PBR (métallique/rugosité/normal) — plus de relief |
+| `MESHY_HD_TEXTURE` | `1` | texture 4K (Meshy-6) — plus de détail |
+| `REMOVE_BG` | `1` | détourage du fond côté serveur (rembg) ; `0` = désactivé |
+| `REMBG_MODEL` | `u2net_human_seg` | modèle de détourage (optimisé **corps/personnes**) ; `u2net` pour le générique |
 
 ## 🧪 Tester en local
 ```bash
@@ -65,4 +70,12 @@ python app.py                          # http://localhost:5000
   + le rate-limit, et un **object storage** (S3) pour les `.glb` (le disque
   Scalingo est éphémère et non partagé).
 - Chaque génération **consomme des crédits Meshy**.
+- **Détourage (rembg)** : tourne sur le dyno (U²-Net via onnxruntime).
+  - **RAM** : prévoir un dyno **M (1 Go)** minimum ; le **S (512 Mo)** risque de
+    manquer de mémoire avec onnxruntime + l'inférence.
+  - **Modèle ~170 Mo** téléchargé au premier boot dans `~/.u2net` (disque
+    éphémère) → re-téléchargé après chaque déploiement/redémarrage. Le warmup au
+    boot évite que ça ralentisse la 1ʳᵉ génération.
+  - **Slug plus lourd** (onnxruntime, scipy, scikit-image…) : build plus long.
+  - Pour désactiver : `REMOVE_BG=0`.
 ```
