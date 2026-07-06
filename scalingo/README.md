@@ -51,6 +51,18 @@ compute. La galerie et le parcours sont 100 % côté navigateur.
 
 Variable : `API_BASE` = URL du backend Scaleway.
 
+Déploiement Scalingo (monorepo : seul `frontend/` est poussé, remis à la racine
+via `git subtree`, donc pas besoin de `PROJECT_DIR`) :
+
+```bash
+# depuis la racine du repo, sur la branche main
+git subtree push --prefix scalingo/frontend scalingo master
+```
+
+`scalingo` = remote `git@ssh.osc-fr1.scalingo.com:demo-mytwin-avatar.git`.
+Configurer `API_BASE` sur l'app (`scalingo --app demo-mytwin-avatar env-set
+API_BASE=…`) avant le premier parcours complet.
+
 ## Développement local (2 process)
 
 ```bash
