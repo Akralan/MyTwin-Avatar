@@ -59,11 +59,20 @@ docker build --platform linux/amd64 -t rg.fr-par.scw.cloud/<namespace>/mytwin-ap
 docker push rg.fr-par.scw.cloud/<namespace>/mytwin-api:latest
 
 # 3) Pointer le Serverless Container sur la nouvelle image (ou via la console).
-#    Régler les variables (MESHY_API_KEY, CORS_ORIGIN=https://<frontend>, …),
-#    port 8080, ~2 Go de RAM, timeout requête >= durée de greffe (~300 s).
 scw container container update <container-id> \
     registry-image=rg.fr-par.scw.cloud/<namespace>/mytwin-api:latest
 ```
+
+Réglages recommandés du Serverless Container :
+
+| Réglage | Valeur | Pourquoi |
+|---|---|---|
+| Port | `8080` | port exposé par le `Dockerfile` |
+| RAM / vCPU | **3072 MB** / **~2500 mVCPU** | le blending de texture HD + rembg + mediapipe peut dépasser 2 Go → OOM sinon ; 1024 MB = échec quasi certain |
+| Concurrency | **1** | une greffe par instance (2 greffes simultanées se font OOM) ; laisser Scaleway scaler en plusieurs instances |
+| Timeout requête | **300 s** | la greffe est synchrone (~1 min CPU) ; couvrir cold start + greffe |
+| Privacy | **Public** | le navigateur appelle l'API directement ; un conteneur privé bloque tout |
+| Variables | `MESHY_API_KEY`, `CORS_ORIGIN=https://<frontend>` | clé Meshy serveur ; origine autorisée (voir Dépannage) |
 
 Scale-to-zero : la 1re requête après inactivité paie le cold start (chargement
 rembg + mediapipe). Le tag `:latest` étant mutable, un `docker push` suivi d'un
@@ -84,7 +93,15 @@ Flask minimal (Flask + gunicorn) : sert `index.html`, `models/face_landmarker.ta
 (asset client) et injecte l'URL du backend via `API_BASE`. Aucun secret, aucun
 compute. La galerie et le parcours sont 100 % côté navigateur.
 
-Variable : `API_BASE` = URL du backend Scaleway.
+Variables :
+
+| Variable | Rôle | Prod |
+|---|---|---|
+| `API_BASE` | URL du backend Scaleway (`https://…scw.cloud`) que le navigateur appelle | **requise** ; doit inclure `https://` sinon la CSP bloque |
+| `PROXY_API` | **dev uniquement** : relaie les appels en same-origin (évite CORS/HTTPS local) | **laisser vide** |
+| `PORT` | port d'écoute | **ne pas définir** : Scalingo l'injecte |
+
+Aucun secret côté frontend (la clé Meshy est 100 % côté backend).
 
 Déploiement Scalingo (monorepo : seul `frontend/` est poussé, remis à la racine
 via `git subtree`, donc pas besoin de `PROJECT_DIR`) :
@@ -115,6 +132,28 @@ Modes test : dans **Réglages → Mode test**, active « Corps de test » (greff
 `corps.glb`, sans Meshy) et/ou « Visage de test » (greffe `visage.glb`, ignore le
 visage capturé). Désactivés par défaut ; nécessite que `corps.glb`/`visage.glb`
 soient présents côté backend.
+
+## Dépannage
+
+- **Frontend « Hors ligne » / « Failed to fetch » alors que `curl <backend>/healthz`
+  répond** : le navigateur est bloqué là où curl ne l'est pas → **CORS** ou **CSP**.
+  Ouvrir la console (F12) :
+  - `... blocked by CORS policy` → `CORS_ORIGIN` du backend ne matche pas l'origine
+    du frontend **au caractère près**. Pièges : **slash final**
+    (`https://x.scalingo.io/` ≠ `https://x.scalingo.io`), `http` vs `https`, ou
+    l'URL du backend mise par erreur. Débloquer avec `CORS_ORIGIN=*` puis
+    redéployer ; durcir ensuite avec l'URL exacte du frontend.
+  - `Refused to connect ... Content Security Policy ... connect-src` → `API_BASE`
+    du frontend mal formée (souvent le `https://` manquant). La corriger et
+    redéployer le frontend.
+- **Le conteneur ne se met pas à jour après un nouveau `:latest`** : un push d'image
+  ne redéploie PAS un conteneur en place. Cliquer *Deploy* dans la console, ou
+  activer le bloc auto-redeploy commenté dans `.github/workflows/deploy-backend.yml`
+  (nécessite `SCW_ACCESS_KEY`, `SCW_DEFAULT_PROJECT_ID` et le `CONTAINER_ID`).
+- **Push CI en échec** : au *login* → secret `SCW_SECRET_KEY` absent/erroné ; au
+  *push* → le namespace de registre (`fr-par`) n'existe pas encore.
+- **Caméra inactive** : elle exige un contexte sécurisé (HTTPS, ou `127.0.0.1` en
+  local). Vérifier aussi l'en-tête `Permissions-Policy: camera=(self)`.
 
 ## Notes démo
 
