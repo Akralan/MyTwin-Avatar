@@ -1,81 +1,79 @@
-# MyTwin Avatar — Web app Scalingo (Meshy AI)
+# MyTwin Avatar
 
-Web app **mobile-first** : une photo → un modèle 3D (via l'API Meshy AI), affiché
-avec `<model-viewer>` (orbite, pinch-zoom, AR sur mobile). Pensée pour une **démo
-client** : UI propre + protections.
+Photo → avatar 3D. **Deux services découplés**, backend sans état, avatars
+stockés sur l'appareil de l'utilisateur (aucune base de données).
 
-## 🔐 Sécurité (déjà en place)
-- **Clé API Meshy 100 % côté serveur** — jamais envoyée au navigateur.
-- **Rate-limiting par IP** sur la génération (`RATE_LIMIT_GENERATE`) → protège tes crédits.
-- **Code d'accès optionnel** (`ACCESS_CODE`) → réserve l'app à tes clients.
-- **Images validées + ré-encodées + redimensionnées** (Pillow) ; taille d'upload limitée.
-- **En-têtes de sécurité** (CSP, `X-Content-Type-Options`, `X-Frame-Options`…).
-- **HTTPS** automatique côté Scalingo.
+```
+frontend/  ── Scalingo   : sert la page + assets client ; le navigateur orchestre
+backend/   ── Scaleway   : conteneur serverless, 3 endpoints stateless (compute)
+```
 
-## 🚀 Déploiement
+Le navigateur est le chef d'orchestre : il lance la génération du corps (Meshy,
+proxifiée par le backend), capture le visage (MediaPipe FaceLandmarker en WASM),
+demande la greffe au backend, puis **stocke l'avatar dans IndexedDB** (galerie).
+Aucun état côté serveur : pas de DB, pas de disque persistant, pas de thread.
 
-### 1. Créer l'app + variables d'env
+## Backend (`backend/`) — Scaleway Serverless Container
+
+Endpoints (sans état) :
+
+| Méthode | Route | Rôle |
+|---|---|---|
+| `POST` | `/body` | détourage (rembg) + création tâche Meshy → `{task_id}` |
+| `GET`  | `/body/status?task_id=` | proxy court vers Meshy → `{status, progress}` |
+| `POST` | `/graft` | `face.glb` + `task_id` → pipeline CPU → renvoie `avatar.glb` |
+| `GET`  | `/healthz` | état |
+
+Le pipeline de greffe (`pipeline/`) est **Python CPU pur** (numpy/scipy/trimesh/
+opencv, rasteriseur logiciel — pas de GPU, pas de Blender). `libgl1`/`libglib2.0-0`
+requis au runtime (opencv). La greffe est synchrone (~1 min CPU).
+
+Variables : `MESHY_API_KEY`, `MESHY_*`, `REMOVE_BG`, `REMBG_MODEL`, `CORS_ORIGIN`
+(origine du frontend, défaut `*` pour la démo), `USE_LOCAL_BODY`/`USE_LOCAL_FACE`
+(modes test : greffent `corps.glb`/`visage.glb` sans appeler Meshy).
+
+Build & run (Docker) :
+
 ```bash
-scalingo create mytwin-avatar
-scalingo --app mytwin-avatar env-set MESHY_API_KEY=msy_xxxxx
-scalingo --app mytwin-avatar env-set SECRET_KEY=$(openssl rand -hex 32)
-# optionnels :
-scalingo --app mytwin-avatar env-set ACCESS_CODE=monCodeClient
-scalingo --app mytwin-avatar env-set RATE_LIMIT_GENERATE="8 per hour"
+cd backend
+docker build -t mytwin-api .
+docker run -p 8080:8080 -e MESHY_API_KEY=... -e CORS_ORIGIN=https://<frontend> mytwin-api
 ```
 
-### 2. Pousser le code
-Ce dossier `scalingo/` doit être **la racine** déployée. Comme il est dans un
-sous-dossier du dépôt, utilise un `git subtree` :
+Déploiement : push l'image sur Scaleway Container Registry → Serverless Container
+(scale-to-zero ; timeout requête ≥ durée de greffe ; ~2 Go de RAM).
+
+## Frontend (`frontend/`) — Scalingo
+
+Flask minimal (Flask + gunicorn) : sert `index.html`, `models/face_landmarker.task`
+(asset client) et injecte l'URL du backend via `API_BASE`. Aucun secret, aucun
+compute. La galerie et le parcours sont 100 % côté navigateur.
+
+Variable : `API_BASE` = URL du backend Scaleway.
+
+## Développement local (2 process)
 
 ```bash
-# depuis la racine du dépôt
-scalingo --app mytwin-avatar git-remote          # ajoute le remote 'scalingo'
-git subtree push --prefix scalingo scalingo master
+# 1) backend (modes locaux : aucun appel/crédit Meshy)
+cd backend && USE_LOCAL_BODY=1 USE_LOCAL_FACE=1 PORT=5001 python api.py
+
+# 2) frontend (pointe sur le backend local)
+cd frontend && API_BASE=http://localhost:5001 PORT=8000 python app.py
 ```
 
-> Alternative : copier le contenu de `scalingo/` dans un dépôt dédié et
-> `git push scalingo master`.
+Ouvre http://127.0.0.1:8000 (la caméra exige un contexte sécurisé : `127.0.0.1`
+est accepté ; pour un test mobile via IP réseau, servir en HTTPS).
 
-### 3. C'est en ligne
-`https://mytwin-avatar.osc-fr1.scalingo.io` (ton URL Scalingo).
+Modes test : `USE_LOCAL_BODY=1` greffe `corps.glb` (pas de Meshy) ;
+`USE_LOCAL_FACE=1` greffe `visage.glb` (ignore le visage capturé).
 
-## ⚙️ Variables d'environnement
-| Variable | Déf. | Rôle |
-|----------|------|------|
-| `MESHY_API_KEY` | — | **obligatoire** — clé API Meshy |
-| `SECRET_KEY` | aléatoire | secret sessions (à fixer pour ne pas invalider les sessions au redéploiement) |
-| `ACCESS_CODE` | *(vide)* | code d'accès partagé ; vide = accès libre |
-| `MESHY_POSE_MODE` | `a-pose` | pose quand l'option A-pose est active |
-| `RATE_LIMIT_GENERATE` | `8 per hour` | quota de génération par IP |
-| `MAX_UPLOAD_MB` | `12` | taille max d'upload |
-| `MESHY_TARGET_POLYCOUNT` | `30000` | densité du mesh (seulement si `MESHY_SHOULD_REMESH=1`) |
-| `MESHY_SHOULD_REMESH` | `0` | `0` = maillage haute précision (qualité web app) ; `1` = mesh allégé (AR/rigging) |
-| `MESHY_ENABLE_PBR` | `1` | maps PBR (métallique/rugosité/normal) — plus de relief |
-| `MESHY_HD_TEXTURE` | `1` | texture 4K (Meshy-6) — plus de détail |
-| `REMOVE_BG` | `1` | détourage du fond côté serveur (rembg) ; `0` = désactivé |
-| `REMBG_MODEL` | `u2net_human_seg` | modèle de détourage (optimisé **corps/personnes**) ; `u2net` pour le générique |
+## Notes démo
 
-## 🧪 Tester en local
-```bash
-cd scalingo
-pip install -r requirements.txt
-export MESHY_API_KEY=msy_xxxxx        # PowerShell : $env:MESHY_API_KEY="msy_xxxxx"
-python app.py                          # http://localhost:5000
-```
-
-## ⚠️ Limites à connaître
-- **1 worker** (Procfile) : l'état des jobs est en mémoire. Pour **scaler à
-  plusieurs dynos/workers**, il faudra un stockage partagé (Redis) pour les jobs
-  + le rate-limit, et un **object storage** (S3) pour les `.glb` (le disque
-  Scalingo est éphémère et non partagé).
-- Chaque génération **consomme des crédits Meshy**.
-- **Détourage (rembg)** : tourne sur le dyno (U²-Net via onnxruntime).
-  - **RAM** : prévoir un dyno **M (1 Go)** minimum ; le **S (512 Mo)** risque de
-    manquer de mémoire avec onnxruntime + l'inférence.
-  - **Modèle ~170 Mo** téléchargé au premier boot dans `~/.u2net` (disque
-    éphémère) → re-téléchargé après chaque déploiement/redémarrage. Le warmup au
-    boot évite que ça ralentisse la 1ʳᵉ génération.
-  - **Slug plus lourd** (onnxruntime, scipy, scikit-image…) : build plus long.
-  - Pour désactiver : `REMOVE_BG=0`.
-```
+- **Poids des avatars** : un avatar fait ~60 Mo (corps haute résolution + textures).
+  IndexedDB tient pour quelques avatars ; peut être purgé par le navigateur sous
+  pression de stockage (surtout iOS). D'où le bouton **Télécharger** (copie durable).
+  Levier d'allègement : Meshy `should_remesh` + texture réduite.
+- **Protection crédits Meshy** : volontairement absente (démo). À rajouter (BFF /
+  gate) avant une mise en prod ouverte.
+- **Cold start** : la 1re requête après inactivité charge rembg+mediapipe
+  (~10-30 s). Mettre `min-scale=1` pendant une démo live si gênant.

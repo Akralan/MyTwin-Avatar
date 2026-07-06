@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#ffffff" />
   <title>MyTwin Avatar</title>
+  <!-- URL du backend Scaleway (injectée par Flask). Vide = même origine. -->
+  <script>window.API_BASE = "{{ api_base }}";</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -176,12 +178,53 @@
     .row>*{flex:1;}
 
     footer{text-align:center;color:var(--gray-light);font-size:11px;padding:14px;}
+
+    /* HEADER : icône réglages */
+    .icon-btn{width:38px;height:38px;border-radius:11px;flex:none;border:1.5px solid var(--border);
+      background:var(--surface);color:var(--gray);display:grid;place-items:center;cursor:pointer;transition:.15s;}
+    .icon-btn:active{transform:scale(.94);}
+    .icon-btn svg{width:20px;height:20px;}
+
+    /* ACCUEIL / GALERIE */
+    .home-hero{margin:2px 2px 2px;}
+    .home-hero h1{font-size:22px;font-weight:800;letter-spacing:-.5px;}
+    .home-hero p{font-size:13px;color:var(--gray);margin-top:3px;}
+    #new-avatar{font-size:16px;}
+    .gallery{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+    .gallery-item{position:relative;background:var(--surface);border:1px solid var(--border);
+      border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);cursor:pointer;transition:transform .1s;}
+    .gallery-item:active{transform:scale(.98);}
+    .gallery-item .thumb{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;
+      background:radial-gradient(circle at 50% 38%,#f3f7fd,var(--bg));}
+    .gallery-item .meta{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;}
+    .gallery-item .when{font-size:11px;color:var(--gray-light);font-weight:600;}
+    .gallery-item .del{border:none;background:transparent;color:var(--gray-light);cursor:pointer;
+      font-size:14px;line-height:1;padding:3px 5px;border-radius:6px;}
+    .gallery-item .del:active{background:var(--bg);}
+    .gallery-empty{grid-column:1/-1;text-align:center;color:var(--gray-light);font-size:13px;line-height:1.6;
+      padding:34px 16px;border:2px dashed var(--border);border-radius:var(--radius);background:var(--bg);}
+
+    /* BOTTOM SHEET (réglages) */
+    .sheet-backdrop{position:fixed;inset:0;z-index:50;background:rgba(15,23,42,.45);display:none;}
+    .sheet-backdrop.show{display:block;}
+    .sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;transform:translateY(100%);
+      background:var(--surface);border-radius:20px 20px 0 0;box-shadow:var(--shadow-md);
+      padding:8px 16px 24px;max-width:540px;margin:0 auto;transition:transform .25s ease;}
+    .sheet.show{transform:translateY(0);}
+    .sheet-grip{width:40px;height:4px;border-radius:99px;background:var(--border);margin:8px auto 12px;}
+    .sheet h3{font-size:15px;font-weight:700;margin:2px 4px 12px;}
   </style>
 </head>
 <body>
   <header>
     <div class="brand"><div class="wordmark">MyTwin</div><div class="sub">AVATAR</div></div>
-    <span id="status-pill" class="off">…</span>
+    <span id="status-pill" class="off" style="margin-left:auto">…</span>
+    <button class="icon-btn" id="settings-btn" type="button" aria-label="Réglages">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="3.2"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2.5v2.6M12 18.9v2.6M4.7 4.7l1.85 1.85M17.45 17.45l1.85 1.85M2.5 12H5.1M18.9 12h2.6M4.7 19.3l1.85-1.85M17.45 6.55l1.85-1.85"/>
+      </svg>
+    </button>
   </header>
 
   <main>
@@ -196,26 +239,18 @@
       <div class="step" data-step="2"><span class="dot">3</span><span class="name">Avatar</span></div>
     </div>
 
-    <!-- ── ÉTAPE 1 : options + photo (génération auto à l'ajout) ── -->
-    <section id="s-upload" class="screen active">
-      <div>
-        <div class="label">Options</div>
-        <div class="card">
-          <div class="opt">
-            <div><div class="lbl">Détourer le fond</div><div class="desc">Retire l'arrière-plan des photos</div></div>
-            <label class="switch"><input type="checkbox" id="bg" checked><span class="slider"></span></label>
-          </div>
-          <div class="opt">
-            <div><div class="lbl">Texturer le modèle</div><div class="desc">Couleurs depuis la photo</div></div>
-            <label class="switch"><input type="checkbox" id="tex" checked><span class="slider"></span></label>
-          </div>
-          <div class="opt">
-            <div><div class="lbl">A-pose</div><div class="desc">Bras écartés, rigging facile</div></div>
-            <label class="switch"><input type="checkbox" id="apose" checked><span class="slider"></span></label>
-          </div>
-        </div>
+    <!-- ── ACCUEIL : galerie des avatars (stockés sur l'appareil) ── -->
+    <section id="s-home" class="screen active">
+      <div class="home-hero">
+        <h1>Vos avatars</h1>
+        <p>Créés et gardés sur cet appareil.</p>
       </div>
+      <button class="btn" id="new-avatar" type="button">+ Nouvel avatar</button>
+      <div class="gallery" id="gallery"></div>
+    </section>
 
+    <!-- ── ÉTAPE 1 : photo (options déplacées dans ⚙️) ── -->
+    <section id="s-upload" class="screen">
       <div>
         <div class="label">Votre photo</div>
         <div id="drop" class="card" role="button" tabindex="0">
@@ -283,11 +318,35 @@
           ar ar-modes="webxr scene-viewer quick-look"></model-viewer>
       </div>
       <div class="hint">Glissez pour tourner · pincez pour zoomer</div>
-      <button class="btn ghost" id="again" type="button">Nouvelle photo</button>
+      <div class="row">
+        <button class="btn ghost" id="download" type="button">Télécharger</button>
+        <button class="btn ghost" id="again" type="button">Galerie</button>
+      </div>
     </section>
   </main>
 
   <footer>Propulsé par Meshy AI</footer>
+
+  <!-- Réglages (bottom sheet) : options avancées, activées par défaut. -->
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
+  <div class="sheet" id="sheet">
+    <div class="sheet-grip"></div>
+    <h3>Réglages</h3>
+    <div class="card">
+      <div class="opt">
+        <div><div class="lbl">Détourer le fond</div><div class="desc">Retire l'arrière-plan des photos</div></div>
+        <label class="switch"><input type="checkbox" id="bg" checked><span class="slider"></span></label>
+      </div>
+      <div class="opt">
+        <div><div class="lbl">Texturer le modèle</div><div class="desc">Couleurs depuis la photo</div></div>
+        <label class="switch"><input type="checkbox" id="tex" checked><span class="slider"></span></label>
+      </div>
+      <div class="opt">
+        <div><div class="lbl">A-pose</div><div class="desc">Bras écartés, rigging facile</div></div>
+        <label class="switch"><input type="checkbox" id="apose" checked><span class="slider"></span></label>
+      </div>
+    </div>
+  </div>
 
   <script type="module">
     import { FilesetResolver, FaceLandmarker, DrawingUtils }
@@ -299,11 +358,16 @@
     const file=$('#file'), drop=$('#drop'), browse=$('#browse'),
           tex=$('#tex'), apose=$('#apose'), bg=$('#bg'),
           banner=$('#banner'), mv=$('#mv'), pill=$('#status-pill');
-    const screens={upload:$('#s-upload'),face:$('#s-face'),result:$('#s-result')};
+    const screens={home:$('#s-home'),upload:$('#s-upload'),face:$('#s-face'),result:$('#s-result')};
     const MAX_IMAGES=4;
-    let chosen=[], timer=null;
-    // État partagé corps (Meshy) <-> visage (MediaPipe)
-    let currentJob=null, faceSent=false, pendingFace=null, faceShot=null,
+    // URL du backend (Scaleway). Vide = même origine (dev).
+    const API=(window.API_BASE||'').replace(/\/$/,'');
+    const api=p=>API+p;
+    let chosen=[];
+    // Orchestration côté navigateur : la génération du corps (Meshy) et la capture du
+    // visage (MediaPipe) tournent en parallèle ; on greffe quand les deux sont prêts.
+    let bodyTaskId=null, bodyReady=false, faceReady=false, grafting=false,
+        faceBlob=null, bodyPoll=null, faceShot=null,
         latestLandmarks=null, latestMatrix=null;
 
     // Fil d'ariane : étape courante + étapes franchies (rappel du parcours).
@@ -320,7 +384,9 @@
         el.classList.toggle('done',+el.dataset.line<cur));
     }
     const show=n=>{for(const k in screens)screens[k].classList.toggle('active',k===n);
-      setStepper(n); window.scrollTo({top:0,behavior:'smooth'});};
+      $('#stepper').style.display=(n==='home')?'none':'flex';
+      if(n!=='home') setStepper(n);
+      window.scrollTo({top:0,behavior:'smooth'});};
     const err=m=>{banner.textContent=m;banner.className='err show';};
     const clearErr=()=>{banner.className='';};
 
@@ -337,17 +403,15 @@
       chosen.forEach(f=>{const u=URL.createObjectURL(f); recapUrls.push(u);
         const img=document.createElement('img'); img.src=u; img.alt=''; box.appendChild(img);});
     }
-    setStepper('upload');
     const setBodyStat=(t,p,ready)=>{
       $('#body-stat').textContent=t;
       if(p!=null){const v=Math.max(5,Math.min(100,p));
         $('#body-fill').style.width=v+'%';$('#body-pct').textContent=Math.round(v)+'%';}
       $('#body-status').classList.toggle('ready',!!ready);};
 
-    // état du service
-    fetch('/model_status').then(r=>r.json()).then(d=>{
-      if(d.ready){pill.className='ok';pill.textContent='Prêt';}
-      else{pill.className='off';pill.textContent='Indisponible';err(d.error||'Service indisponible.');}
+    // état du backend
+    fetch(api('/healthz')).then(r=>r.json()).then(()=>{
+      pill.className='ok';pill.textContent='Prêt';
     }).catch(()=>{pill.className='off';pill.textContent='Hors ligne';});
 
     // Choix des images (1 à 4) -> génération automatique
@@ -369,9 +433,10 @@
 
     async function generate(){
       if(!chosen.length) return;
-      // On bascule tout de suite sur la capture du visage : le corps part en
-      // arrière-plan, l'utilisateur occupe l'attente en scannant son visage.
-      currentJob=null; faceSent=false; pendingFace=null; faceShot=null; latestLandmarks=null;
+      // On bascule tout de suite sur la capture du visage : le corps se génère en
+      // arrière-plan (poll navigateur) pendant que l'utilisateur scanne son visage.
+      bodyTaskId=null; bodyReady=false; faceReady=false; grafting=false;
+      faceBlob=null; faceShot=null; latestLandmarks=null;
       fillRecap();
       show('face'); startFace(); setBodyStat('Envoi des photos du corps…',5);
       const fd=new FormData();
@@ -380,33 +445,53 @@
       fd.append('apose',apose.checked?'1':'0');
       fd.append('removebg',bg.checked?'1':'0');
       try{
-        const r=await fetch('/upload',{method:'POST',body:fd});
+        const r=await fetch(api('/body'),{method:'POST',body:fd});
         const d=await r.json();
         if(!r.ok) throw new Error(d.error||'Erreur');
-        currentJob=d.job_id;
+        bodyTaskId=d.task_id;
         setBodyStat('Génération du corps en cours…');
-        if(pendingFace){const b=pendingFace;pendingFace=null;sendFace(b);}  // visage capturé avant la réponse
-        track(currentJob);
+        pollBody();
       }catch(e){hideStageLoader();stopFace();show('upload');err(e.message);}
     }
 
-    function track(id){
-      timer=setInterval(async()=>{
+    // Poll court du statut Meshy (proxifié par le backend). L'attente longue vit ici,
+    // dans le navigateur — aucun thread serveur.
+    function pollBody(){
+      bodyPoll=setInterval(async()=>{
         try{
-          const r=await fetch('/status/'+id);
+          const r=await fetch(api('/body/status?task_id='+encodeURIComponent(bodyTaskId)));
           const d=await r.json();
           if(!r.ok) throw new Error(d.error||'Erreur');
-          const m=(d.stage||'').match(/(\d+)%/);
-          const p=m?parseInt(m[1]):40;
+          const p=d.progress||0;
           if(d.status==='queued') setBodyStat('En file d\'attente…',p);
           else if(d.status==='processing') setBodyStat('Génération du corps…',p);
-          else if(d.status==='awaiting_face') setBodyStat('Corps prêt — prenez votre visage',100,true);
-          else if(d.status==='grafting'){ setBodyStat('Application du visage…',100,true);
-            if(faceSent) showStageLoader('Application de votre visage…'); }
-          if(d.status==='done'){clearInterval(timer);hideStageLoader();stopFace();openResult(d);}
-          if(d.status==='error'){clearInterval(timer);hideStageLoader();stopFace();show('upload');err(d.error||'Échec');}
-        }catch(e){clearInterval(timer);hideStageLoader();stopFace();show('upload');err(e.message);}
+          else if(d.status==='succeeded'){ clearInterval(bodyPoll); bodyPoll=null;
+            bodyReady=true; setBodyStat('Corps prêt',100,true); maybeGraft(); }
+          else if(d.status==='failed'){ clearInterval(bodyPoll); bodyPoll=null;
+            hideStageLoader(); stopFace(); show('upload'); err(d.error||'Génération échouée.'); }
+        }catch(e){ clearInterval(bodyPoll); bodyPoll=null; hideStageLoader(); stopFace(); show('upload'); err(e.message); }
       },3000);
+    }
+
+    // Greffe dès que corps ET visage sont prêts : envoie face.glb + task_id, reçoit
+    // avatar.glb, le stocke sur l'appareil (galerie) puis l'affiche.
+    async function maybeGraft(){
+      if(grafting || !bodyReady || !faceReady) return;
+      grafting=true;
+      showStageLoader('Assemblage de votre avatar…');
+      setBodyStat('Application du visage…',100,true);
+      try{
+        const fd=new FormData();
+        fd.append('task_id',bodyTaskId||'');
+        fd.append('face',faceBlob,'face.glb');
+        const r=await fetch(api('/graft'),{method:'POST',body:fd});
+        if(!r.ok){ let m='La greffe a échoué.'; try{m=(await r.json()).error||m;}catch(e){} throw new Error(m); }
+        const blob=await r.blob();
+        hideStageLoader(); stopFace();
+        openResult(blob);        // affiche l'avatar immédiatement
+        saveAvatar(blob);        // galerie + poster en arrière-plan (non bloquant)
+      }catch(e){ grafting=false; hideStageLoader();
+        faceMsg('Assemblage échoué — '+e.message); retakeBtn.style.display=''; }
     }
 
     // ── Capture du visage via MediaPipe Tasks — FaceLandmarker ─────────────
@@ -517,22 +602,12 @@
       faceMsg('Vérifiez le masque 3D de votre visage, puis validez.');
     }
 
-    // Envoie le face.glb au backend (ou le met en attente si le job n'est pas encore créé).
-    async function sendFace(blob){
-      showStageLoader('Envoi de votre visage…');
-      if(!currentJob){ pendingFace=blob; showStageLoader('Envoi imminent…'); return; }
-      if(faceSent) return;
-      faceSent=true;
-      try{
-        const fd=new FormData();
-        fd.append('face',blob,'face.glb');
-        const r=await fetch('/face/'+currentJob,{method:'POST',body:fd});
-        const d=await r.json();
-        if(!r.ok) throw new Error(d.error||'Erreur');
-        retakeBtn.style.display='none';                 // validé + envoyé : plus de reprise possible
-        showStageLoader('Visage envoyé — finalisation de votre avatar…');
-      }catch(e){ faceSent=false; hideStageLoader(); faceMsg('Envoi échoué — réessayez ou reprenez.');
-        if(pendingGlb){validateBtn.style.display='';validateBtn.disabled=false;} }
+    // Visage validé : on le retient et on tente la greffe si le corps est prêt.
+    function markFaceReady(blob){
+      faceBlob=blob; faceReady=true;
+      retakeBtn.style.display='none';
+      showStageLoader(bodyReady?'Assemblage de votre avatar…':'Visage prêt — attente du corps…');
+      maybeGraft();
     }
 
     function stopFace(){
@@ -546,9 +621,9 @@
     validateBtn.addEventListener('click',()=>{
       if(!pendingGlb) return;
       validateBtn.disabled=true; validateBtn.style.display='none';
-      sendFace(pendingGlb);
+      markFaceReady(pendingGlb);
     });
-    retakeBtn.addEventListener('click',()=>{ faceSent=false; pendingFace=null; startFace(); });
+    retakeBtn.addEventListener('click',()=>{ faceReady=false; faceBlob=null; grafting=false; startFace(); });
 
     // ── Construction du face.glb (topologie MediaPipe canonique, texture = photo) ──
     // Le pipeline backend (texture_swap) attend exactement ce format : 478 sommets en
@@ -661,16 +736,107 @@
       return new Blob([out],{type:'model/gltf-binary'});
     }
 
-    function openResult(d){
-      const url=(d.tex_files&&d.tex_files[0])||(d.ply_files&&d.ply_files[0]);
-      mv.src=url; show('result');
+    let resultUrl=null;
+    function openResult(blob){
+      if(resultUrl) URL.revokeObjectURL(resultUrl);
+      resultUrl=URL.createObjectURL(blob);
+      mv.src=resultUrl; show('result');
     }
 
-    $('#again').addEventListener('click',()=>{
-      chosen=[]; file.value=''; mv.src=''; clearErr(); fillRecap();
-      currentJob=null; faceSent=false; pendingFace=null; faceShot=null; latestLandmarks=null;
-      hideStageLoader(); stopFace(); show('upload');
+    function resetFlow(){
+      chosen=[]; file.value=''; clearErr(); fillRecap();
+      bodyTaskId=null; bodyReady=false; faceReady=false; grafting=false;
+      faceBlob=null; faceShot=null; latestLandmarks=null;
+      if(bodyPoll){clearInterval(bodyPoll); bodyPoll=null;}
+      hideStageLoader(); stopFace();
+    }
+
+    // ── Galerie : stockage local des avatars (IndexedDB) ──────────────────
+    const DB_NAME='mytwin', STORE='avatars';
+    function openDB(){return new Promise((res,rej)=>{
+      const q=indexedDB.open(DB_NAME,1);
+      q.onupgradeneeded=()=>q.result.createObjectStore(STORE,{keyPath:'id'});
+      q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});}
+    function dbTx(mode,fn){return openDB().then(db=>new Promise((res,rej)=>{
+      const t=db.transaction(STORE,mode); const r=fn(t.objectStore(STORE));
+      t.oncomplete=()=>res(r&&r.result); t.onerror=()=>rej(t.error);}));}
+    const dbPut=rec=>dbTx('readwrite',s=>s.put(rec));
+    const dbDel=id=>dbTx('readwrite',s=>s.delete(id));
+    const dbAll=()=>dbTx('readonly',s=>s.getAll());
+
+    async function saveAvatar(glbBlob){
+      const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      let poster=null; try{ poster=await snapshotPoster(glbBlob); }catch(e){}
+      try{ await dbPut({id,createdAt:Date.now(),glb:glbBlob,poster}); }catch(e){}
+    }
+
+    // Vignette : rend le GLB dans un model-viewer hors écran et en capture une image.
+    function snapshotPoster(glbBlob){
+      return new Promise((res,rej)=>{
+        const url=URL.createObjectURL(glbBlob);
+        const el=document.createElement('model-viewer');
+        el.style.cssText='position:fixed;left:-9999px;top:0;width:300px;height:400px;';
+        el.setAttribute('exposure','1.05'); el.setAttribute('shadow-intensity','1');
+        el.setAttribute('interaction-prompt','none');
+        let settled=false;
+        const done=(fn,arg)=>{if(settled)return;settled=true;clearTimeout(to);el.remove();URL.revokeObjectURL(url);fn(arg);};
+        const to=setTimeout(()=>done(rej,new Error('poster timeout')),12000);
+        el.addEventListener('load',async()=>{
+          try{ await el.updateComplete;
+            const b=await el.toBlob({mimeType:'image/jpeg',qualityArgument:0.8,idealAspect:true});
+            done(res,b);
+          }catch(e){ done(rej,e); }
+        },{once:true});
+        el.addEventListener('error',()=>done(rej,new Error('poster')),{once:true});
+        el.src=url; document.body.appendChild(el);
+      });
+    }
+
+    let galleryUrls=[];
+    async function renderGallery(){
+      const grid=$('#gallery');
+      galleryUrls.forEach(u=>URL.revokeObjectURL(u)); galleryUrls=[];
+      let items=[]; try{ items=await dbAll(); }catch(e){}
+      items.sort((a,b)=>b.createdAt-a.createdAt);
+      if(!items.length){
+        grid.innerHTML='<div class="gallery-empty">Aucun avatar pour l\'instant.<br>Touchez « + Nouvel avatar » pour commencer.</div>';
+        return;
+      }
+      grid.innerHTML='';
+      items.forEach(it=>{
+        const card=document.createElement('div'); card.className='gallery-item';
+        const img=document.createElement('img'); img.className='thumb'; img.alt='';
+        if(it.poster){ const u=URL.createObjectURL(it.poster); galleryUrls.push(u); img.src=u; }
+        const meta=document.createElement('div'); meta.className='meta';
+        const when=new Date(it.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+        meta.innerHTML=`<span class="when">${when}</span><button class="del" title="Supprimer">✕</button>`;
+        meta.querySelector('.del').addEventListener('click',async e=>{e.stopPropagation();await dbDel(it.id);renderGallery();});
+        card.append(img,meta);
+        card.addEventListener('click',()=>openResult(it.glb));
+        grid.appendChild(card);
+      });
+    }
+
+    // Boutons parcours / galerie
+    $('#new-avatar').addEventListener('click',()=>{ resetFlow(); show('upload'); });
+    $('#again').addEventListener('click',()=>{ resetFlow(); renderGallery(); show('home'); });
+    $('#download').addEventListener('click',()=>{
+      if(!mv.src) return;
+      const a=document.createElement('a'); a.href=mv.src; a.download='avatar.glb'; a.click();
     });
+
+    // ── Réglages (bottom sheet) : persistance des toggles ──
+    const sheet=$('#sheet'), sheetBk=$('#sheet-backdrop');
+    $('#settings-btn').addEventListener('click',()=>{sheetBk.classList.add('show');sheet.classList.add('show');});
+    sheetBk.addEventListener('click',()=>{sheetBk.classList.remove('show');sheet.classList.remove('show');});
+    [bg,tex,apose].forEach(t=>{
+      const k='opt_'+t.id, v=localStorage.getItem(k);
+      if(v!==null) t.checked=(v==='1');
+      t.addEventListener('change',()=>localStorage.setItem(k,t.checked?'1':'0'));
+    });
+
+    // Démarrage : galerie + écran d'accueil.
+    renderGallery(); show('home');
   </script>
 </body>
 </html>
