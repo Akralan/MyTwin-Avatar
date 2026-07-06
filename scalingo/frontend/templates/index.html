@@ -346,6 +346,17 @@
         <label class="switch"><input type="checkbox" id="apose" checked><span class="slider"></span></label>
       </div>
     </div>
+    <h3>Mode test</h3>
+    <div class="card">
+      <div class="opt">
+        <div><div class="lbl">Corps de test (local)</div><div class="desc">Ignore Meshy, greffe sur corps.glb</div></div>
+        <label class="switch"><input type="checkbox" id="local-body"><span class="slider"></span></label>
+      </div>
+      <div class="opt">
+        <div><div class="lbl">Visage de test (local)</div><div class="desc">Ignore la capture, greffe visage.glb</div></div>
+        <label class="switch"><input type="checkbox" id="local-face"><span class="slider"></span></label>
+      </div>
+    </div>
   </div>
 
   <script type="module">
@@ -357,6 +368,7 @@
     const $=s=>document.querySelector(s);
     const file=$('#file'), drop=$('#drop'), browse=$('#browse'),
           tex=$('#tex'), apose=$('#apose'), bg=$('#bg'),
+          localBody=$('#local-body'), localFace=$('#local-face'),
           banner=$('#banner'), mv=$('#mv'), pill=$('#status-pill');
     const screens={home:$('#s-home'),upload:$('#s-upload'),face:$('#s-face'),result:$('#s-result')};
     const MAX_IMAGES=4;
@@ -444,6 +456,7 @@
       fd.append('texture',tex.checked?'1':'0');
       fd.append('apose',apose.checked?'1':'0');
       fd.append('removebg',bg.checked?'1':'0');
+      fd.append('local_body',localBody.checked?'1':'0');
       try{
         const r=await fetch(api('/body'),{method:'POST',body:fd});
         const d=await r.json();
@@ -484,6 +497,7 @@
         const fd=new FormData();
         fd.append('task_id',bodyTaskId||'');
         fd.append('face',faceBlob,'face.glb');
+        fd.append('local_face',localFace.checked?'1':'0');
         const r=await fetch(api('/graft'),{method:'POST',body:fd});
         if(!r.ok){ let m='La greffe a échoué.'; try{m=(await r.json()).error||m;}catch(e){} throw new Error(m); }
         const blob=await r.blob();
@@ -829,7 +843,7 @@
     const sheet=$('#sheet'), sheetBk=$('#sheet-backdrop');
     $('#settings-btn').addEventListener('click',()=>{sheetBk.classList.add('show');sheet.classList.add('show');});
     sheetBk.addEventListener('click',()=>{sheetBk.classList.remove('show');sheet.classList.remove('show');});
-    [bg,tex,apose].forEach(t=>{
+    [bg,tex,apose,localBody,localFace].forEach(t=>{
       const k='opt_'+t.id, v=localStorage.getItem(k);
       if(v!==null) t.checked=(v==='1');
       t.addEventListener('change',()=>localStorage.setItem(k,t.checked?'1':'0'));

@@ -14,12 +14,13 @@ L'attente longue (génération du corps par Meshy) se passe côté navigateur, q
 poll /body/status pendant que l'utilisateur capture son visage. La greffe est
 synchrone (une requête/réponse) et renvoie le GLB dans le corps de la réponse.
 
-Modes test (aucun appel Meshy / crédit) :
-  USE_LOCAL_BODY=1  -> /body renvoie task_id="local", /graft greffe sur corps.glb
-  USE_LOCAL_FACE=1  -> /graft ignore le visage reçu et greffe visage.glb
+Modes test (aucun appel Meshy / crédit), pilotés PAR REQUÊTE via les toggles du
+frontend (désactivés par défaut) :
+  local_body=1  -> /body renvoie task_id="local", /graft greffe sur corps.glb
+  local_face=1  -> /graft ignore le visage reçu et greffe visage.glb
 
 Clé Meshy 100 % serveur. CORS ouvert (démo) via CORS_ORIGIN (défaut *).
-Variables : MESHY_API_KEY, MESHY_*, REMOVE_BG, REMBG_MODEL, USE_LOCAL_*, CORS_ORIGIN.
+Variables : MESHY_API_KEY, MESHY_*, REMOVE_BG, REMBG_MODEL, CORS_ORIGIN.
 """
 import os
 import io
@@ -49,6 +50,16 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() not in ("0", "false", "no", "off")
 
 
+def _req_bool(name: str, default: bool = False) -> bool:
+    """Flag booléen d'une requête (form d'abord, sinon query string)."""
+    raw = request.form.get(name)
+    if raw is None:
+        raw = request.args.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "on", "yes")
+
+
 # --------------------------------------------------------------------------- #
 #  Configuration
 # --------------------------------------------------------------------------- #
@@ -56,10 +67,9 @@ MESHY_API_KEY = os.environ.get("MESHY_API_KEY", "")
 MESHY_BASE = "https://api.meshy.ai/openapi/v1"
 CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "*")
 
-# Modes test (voir docstring).
-USE_LOCAL_BODY = _env_bool("USE_LOCAL_BODY", True)
+# Modes test (voir docstring) : activés par requête via les toggles du frontend
+# (local_body / local_face), désactivés par défaut — plus de variable d'env.
 LOCAL_BODY_GLB = Path(os.environ.get("LOCAL_BODY_GLB", str(HERE / "corps.glb")))
-USE_LOCAL_FACE = _env_bool("USE_LOCAL_FACE", True)
 LOCAL_FACE_GLB = Path(os.environ.get("LOCAL_FACE_GLB", str(HERE / "visage.glb")))
 
 AI_MODEL = os.environ.get("MESHY_AI_MODEL", "latest")
@@ -198,15 +208,14 @@ def _preflight():
 # --------------------------------------------------------------------------- #
 @app.route("/healthz")
 def healthz():
-    return jsonify({"ok": True, "configured": bool(MESHY_API_KEY),
-                    "local_body": USE_LOCAL_BODY, "local_face": USE_LOCAL_FACE})
+    return jsonify({"ok": True, "configured": bool(MESHY_API_KEY)})
 
 
 @app.route("/body", methods=["POST"])
 def body():
     """Prépare les images (détourage) et crée la tâche Meshy. Renvoie le task_id ;
     le navigateur poll /body/status. En mode local, court-circuite Meshy."""
-    if USE_LOCAL_BODY:
+    if _req_bool("local_body"):
         return jsonify({"task_id": LOCAL_TASK})
     if not MESHY_API_KEY:
         return jsonify({"error": "Service non configuré."}), 503
@@ -249,7 +258,7 @@ def body_status():
     task_id = request.args.get("task_id", "")
     if not task_id:
         return jsonify({"error": "task_id manquant."}), 400
-    if task_id == LOCAL_TASK or USE_LOCAL_BODY:
+    if task_id == LOCAL_TASK:
         return jsonify({"status": "succeeded", "progress": 100})
     try:
         d = _get_task(task_id)
@@ -268,7 +277,7 @@ def body_status():
 def _resolve_body(task_id: str, dest: Path) -> None:
     """Écrit le corps (model.glb) dans dest : corps local en mode test, sinon
     télécharge le résultat Meshy de la tâche."""
-    if task_id == LOCAL_TASK or USE_LOCAL_BODY:
+    if task_id == LOCAL_TASK:
         shutil.copyfile(LOCAL_BODY_GLB, dest)
         return
     d = _get_task(task_id)
@@ -295,8 +304,8 @@ def graft():
         out_path = tmp / "avatar.glb"
 
         # Visage : local (test) ou reçu du navigateur.
-        if USE_LOCAL_FACE and LOCAL_FACE_GLB.exists():
-            log.info("USE_LOCAL_FACE : visage du navigateur ignoré (%s)", LOCAL_FACE_GLB)
+        if _req_bool("local_face") and LOCAL_FACE_GLB.exists():
+            log.info("local_face : visage du navigateur ignoré (%s)", LOCAL_FACE_GLB)
             shutil.copyfile(LOCAL_FACE_GLB, face_path)
         else:
             f = request.files.get("face")
@@ -330,8 +339,8 @@ def graft():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-# Pré-charge rembg au boot (sauf mode corps local, qui n'en a pas besoin).
-if REMOVE_BG and not USE_LOCAL_BODY:
+# Pré-charge rembg au boot (le corps réel — détourage — est le mode par défaut).
+if REMOVE_BG:
     threading.Thread(target=_get_rembg_session, daemon=True).start()
 
 

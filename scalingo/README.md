@@ -29,8 +29,10 @@ opencv, rasteriseur logiciel — pas de GPU, pas de Blender). `libgl1`/`libglib2
 requis au runtime (opencv). La greffe est synchrone (~1 min CPU).
 
 Variables : `MESHY_API_KEY`, `MESHY_*`, `REMOVE_BG`, `REMBG_MODEL`, `CORS_ORIGIN`
-(origine du frontend, défaut `*` pour la démo), `USE_LOCAL_BODY`/`USE_LOCAL_FACE`
-(modes test : greffent `corps.glb`/`visage.glb` sans appeler Meshy).
+(origine du frontend, défaut `*` pour la démo). Les modes test (greffer
+`corps.glb`/`visage.glb` sans appeler Meshy) sont pilotés **par requête** via les
+champs `local_body`/`local_face` — exposés en toggles dans les réglages du
+frontend (désactivés par défaut), plus de variable d'env.
 
 Build & run (Docker) :
 
@@ -66,8 +68,8 @@ API_BASE=…`) avant le premier parcours complet.
 ## Développement local (2 process)
 
 ```bash
-# 1) backend (modes locaux : aucun appel/crédit Meshy)
-cd backend && USE_LOCAL_BODY=1 USE_LOCAL_FACE=1 PORT=5001 python api.py
+# 1) backend
+cd backend && PORT=5001 python api.py
 
 # 2) frontend (pointe sur le backend local)
 cd frontend && API_BASE=http://localhost:5001 PORT=8000 python app.py
@@ -76,8 +78,10 @@ cd frontend && API_BASE=http://localhost:5001 PORT=8000 python app.py
 Ouvre http://127.0.0.1:8000 (la caméra exige un contexte sécurisé : `127.0.0.1`
 est accepté ; pour un test mobile via IP réseau, servir en HTTPS).
 
-Modes test : `USE_LOCAL_BODY=1` greffe `corps.glb` (pas de Meshy) ;
-`USE_LOCAL_FACE=1` greffe `visage.glb` (ignore le visage capturé).
+Modes test : dans **Réglages → Mode test**, active « Corps de test » (greffe
+`corps.glb`, sans Meshy) et/ou « Visage de test » (greffe `visage.glb`, ignore le
+visage capturé). Désactivés par défaut ; nécessite que `corps.glb`/`visage.glb`
+soient présents côté backend.
 
 ## Notes démo
 
