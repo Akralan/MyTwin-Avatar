@@ -34,7 +34,7 @@ Variables : `MESHY_API_KEY`, `MESHY_*`, `REMOVE_BG`, `REMBG_MODEL`, `CORS_ORIGIN
 champs `local_body`/`local_face` — exposés en toggles dans les réglages du
 frontend (désactivés par défaut), plus de variable d'env.
 
-Build & run (Docker) :
+Build & run local (Docker) :
 
 ```bash
 cd backend
@@ -42,8 +42,32 @@ docker build -t mytwin-api .
 docker run -p 8080:8080 -e MESHY_API_KEY=... -e CORS_ORIGIN=https://<frontend> mytwin-api
 ```
 
-Déploiement : push l'image sur Scaleway Container Registry → Serverless Container
-(scale-to-zero ; timeout requête ≥ durée de greffe ; ~2 Go de RAM).
+Déploiement sur Scaleway (Container Registry → Serverless Container). Remplacer
+`<namespace>` par le nom du namespace du registre ; région `fr-par` ici.
+
+```bash
+# 0) (une fois) créer un namespace de registre et récupérer une clé API Scaleway.
+#    Login Docker au registre (user = "nologin", password = clé secrète Scaleway).
+echo "$SCW_SECRET_KEY" | docker login rg.fr-par.scw.cloud -u nologin --password-stdin
+
+# 1) Build en amd64 (Scaleway tourne en x86_64 ; --platform indispensable si build
+#    depuis un Mac ARM, inoffensif sinon). Tag = chemin complet dans le registre.
+cd backend
+docker build --platform linux/amd64 -t rg.fr-par.scw.cloud/<namespace>/mytwin-api:latest .
+
+# 2) Push de l'image
+docker push rg.fr-par.scw.cloud/<namespace>/mytwin-api:latest
+
+# 3) Pointer le Serverless Container sur la nouvelle image (ou via la console).
+#    Régler les variables (MESHY_API_KEY, CORS_ORIGIN=https://<frontend>, …),
+#    port 8080, ~2 Go de RAM, timeout requête >= durée de greffe (~300 s).
+scw container container update <container-id> \
+    registry-image=rg.fr-par.scw.cloud/<namespace>/mytwin-api:latest
+```
+
+Scale-to-zero : la 1re requête après inactivité paie le cold start (chargement
+rembg + mediapipe). Le tag `:latest` étant mutable, un `docker push` suivi d'un
+redéploiement du conteneur suffit pour livrer une nouvelle version.
 
 ## Frontend (`frontend/`) — Scalingo
 

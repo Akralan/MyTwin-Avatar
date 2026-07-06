@@ -20,13 +20,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -c "from rembg import new_session; new_session('u2net_human_seg')"
 
 # Pipeline + modèle FaceLandmarker + corps/visage de test.
+# corps.glb / visage.glb sont embarqués pour les toggles "Mode test" du frontend
+# (local_body / local_face, par requête) — utilisables en prod pour tests/démos.
 COPY pipeline/ ./pipeline/
 COPY models/ ./models/
 COPY corps.glb visage.glb api.py ./
-
-# Meshy réel par défaut en prod ; passer USE_LOCAL_BODY/FACE=1 pour la démo locale.
-ENV USE_LOCAL_BODY=0 \
-    USE_LOCAL_FACE=0
 
 EXPOSE 8080
 # timeout large : /graft est synchrone (CPU).
