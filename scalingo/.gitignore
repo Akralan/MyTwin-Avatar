@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 /tmp/
 *.glb
+# corps/visage de test : embarqués dans l'image backend (build CI), donc versionnés.
+!backend/corps.glb
+!backend/visage.glb

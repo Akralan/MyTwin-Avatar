@@ -69,6 +69,15 @@ Scale-to-zero : la 1re requête après inactivité paie le cold start (chargemen
 rembg + mediapipe). Le tag `:latest` étant mutable, un `docker push` suivi d'un
 redéploiement du conteneur suffit pour livrer une nouvelle version.
 
+En pratique, ce build/push est **automatisé par GitHub Actions**
+(`.github/workflows/deploy-backend.yml`) : à chaque push sur `main` touchant
+`scalingo/backend/**`, les runners GitHub construisent l'image et la poussent sur
+le registre (pas d'upload depuis une machine locale). Seul secret requis :
+`SCW_SECRET_KEY` (clé API Scaleway dédiée, droits limités au Container Registry).
+Les `.glb` de test sont versionnés (exception dans `.gitignore`) pour que la CI
+puisse les embarquer. Le redéploiement du conteneur reste manuel (ou via le bloc
+optionnel commenté dans le workflow, une fois le conteneur créé).
+
 ## Frontend (`frontend/`) — Scalingo
 
 Flask minimal (Flask + gunicorn) : sert `index.html`, `models/face_landmarker.task`
