@@ -67,6 +67,14 @@ USE_LOCAL_BODY = _env_bool("USE_LOCAL_BODY", True)
 LOCAL_BODY_GLB = Path(os.environ.get("LOCAL_BODY_GLB",
                                      str(Path(__file__).with_name("corps.glb"))))
 
+# --- Visage local (test) : greffe un visage fourni (visage.glb à la racine) au lieu
+# du visage capturé par MediaPipe dans le navigateur. N'a d'effet que si le fichier
+# existe. Mettre USE_LOCAL_FACE=0 pour rebrancher la capture ; LOCAL_FACE_GLB pointe
+# un autre fichier. ---
+USE_LOCAL_FACE = _env_bool("USE_LOCAL_FACE", True)
+LOCAL_FACE_GLB = Path(os.environ.get("LOCAL_FACE_GLB",
+                                     str(Path(__file__).with_name("visage.glb"))))
+
 AI_MODEL = os.environ.get("MESHY_AI_MODEL", "latest")
 POSE_MODE = os.environ.get("MESHY_POSE_MODE", "a-pose")
 TARGET_POLYCOUNT = int(os.environ.get("MESHY_TARGET_POLYCOUNT", "30000"))
@@ -466,7 +474,15 @@ def upload_face(job_id):
 
     dest = DATA_DIR / job_id / "face.glb"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    f.save(dest)
+    if USE_LOCAL_FACE and LOCAL_FACE_GLB.exists():
+        # Mode test : on ignore le visage du navigateur et on greffe le visage local
+        # fourni (visage.glb à la racine) — utile pour tester la greffe avec un scan de
+        # référence, indépendamment de la capture MediaPipe.
+        log.info("USE_LOCAL_FACE : job %s -> %s (visage du navigateur ignoré)",
+                 job_id, LOCAL_FACE_GLB)
+        shutil.copyfile(LOCAL_FACE_GLB, dest)
+    else:
+        f.save(dest)
     # Garde-fou : GLB binaire valide (magic "glTF").
     with open(dest, "rb") as fh:
         if fh.read(4) != b"glTF":
@@ -500,6 +516,18 @@ def serve_output(job_id, filename):
         abort(404)
     return send_from_directory(directory, filename,
                                mimetype="model/gltf-binary", max_age=3600)
+
+
+@app.route("/models/face_landmarker.task")
+def face_landmarker_model():
+    """Sert le modèle MediaPipe FaceLandmarker au front (même fichier que le pipeline
+    backend). Permet au navigateur d'utiliser exactement le modèle d'Android, sans
+    dépendre d'un CDN tiers (CSP connect-src 'self')."""
+    models_dir = Path(__file__).resolve().parent / "models"
+    if not (models_dir / "face_landmarker.task").exists():
+        abort(404)
+    return send_from_directory(models_dir, "face_landmarker.task",
+                               mimetype="application/octet-stream", max_age=86400)
 
 
 @app.route("/healthz")
