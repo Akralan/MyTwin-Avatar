@@ -339,9 +339,23 @@ def graft():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-# Pré-charge rembg au boot (le corps réel — détourage — est le mode par défaut).
+def _preload_pipeline():
+    """Importe la chaîne de greffe lourde au boot (mediapipe/scipy/trimesh/opencv +
+    cache polices matplotlib). Sans ça, la 1re greffe d'une instance paie ~150 s
+    d'imports *dans* la requête (voir l'import différé dans /graft) — mesuré sur le
+    conteneur Scaleway. Ici c'est absorbé au démarrage, hors du timeout requête."""
+    try:
+        import pipeline.orchestrator  # noqa: F401  (déclenche tous les imports lourds)
+        log.info("pipeline preloaded (mediapipe/scipy/trimesh/opencv ready)")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pipeline preload failed: %s", exc)
+
+
+# Pré-charges au boot (hors requête) : rembg (détourage, mode par défaut) et la
+# chaîne de greffe. Avec min-scale>=1, l'instance reste chaude et ne les repaie pas.
 if REMOVE_BG:
     threading.Thread(target=_get_rembg_session, daemon=True).start()
+threading.Thread(target=_preload_pipeline, daemon=True).start()
 
 
 if __name__ == "__main__":
