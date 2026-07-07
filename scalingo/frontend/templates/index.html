@@ -595,9 +595,12 @@
 
     function captureFace(){
       if(!hasFace||!latestLandmarks) return;
+      // Plafonne la texture à FACE_TEX_MAX px de côté (mémoire backend / anti-OOM).
+      const vw=cam.videoWidth, vh=cam.videoHeight;
+      const sc=Math.min(1, FACE_TEX_MAX/Math.max(vw,vh));
       const c=document.createElement('canvas');
-      c.width=cam.videoWidth; c.height=cam.videoHeight;
-      c.getContext('2d').drawImage(cam,0,0);   // frame brute (non miroir), repère des landmarks
+      c.width=Math.round(vw*sc); c.height=Math.round(vh*sc);
+      c.getContext('2d').drawImage(cam,0,0,c.width,c.height);   // frame brute (non miroir), plafonnée
       faceShot=c.toDataURL('image/jpeg',0.92);
       cam.style.display='none'; overlay.style.display='none';
       captureBtn.style.display='none';
@@ -644,6 +647,28 @@
     // ordre canonique, 898 triangles (TRI), UV = position du landmark dans la photo,
     // 1 texture. Aligné sur les visage.glb produits par ARCore.
     const TRI=Uint16Array.from(FACE_TRIANGULATION);
+    // Côté max de la texture visage envoyée au backend. La webcam capture jusqu'en 4K
+    // (voir startFace) mais un visage n'a pas besoin de plus pour la greffe ; surtout, le
+    // rastériseur backend décode la texture en numpy brut (~25-33 Mo en 4K, ×copies de
+    // travail) -> pic mémoire qui fait sauter (OOM) le conteneur Scaleway. Les landmarks
+    // sont normalisés [0,1], donc réduire la texture ne touche ni le repérage ni les UV.
+    const FACE_TEX_MAX=1024;
+    // Rentrée des UV du contour vers l'intérieur (0 = aucune, 0.1 = 10 %). Empêche la
+    // texture de déborder sur le fond derrière le visage : les triangles de bordure
+    // échantillonnent la peau et jamais l'arrière-plan (masque net, comme ARCore).
+    const FACE_EDGE_ERODE=0.07;
+    // Sommets du contour du maillage = extrémités des arêtes n'appartenant qu'à UN seul
+    // triangle (bords ouverts de la silhouette). Dérivé une fois de la triangulation.
+    const FACE_BOUNDARY=(()=>{
+      const cnt=new Map(), key=(a,b)=>a<b?a*100000+b:b*100000+a;
+      for(let t=0;t<TRI.length;t+=3){
+        const a=TRI[t],b=TRI[t+1],d=TRI[t+2];
+        for(const e of [[a,b],[b,d],[d,a]]){const k=key(e[0],e[1]);cnt.set(k,(cnt.get(k)||0)+1);}
+      }
+      const s=new Set();
+      for(const [k,v] of cnt) if(v===1){s.add(Math.floor(k/100000));s.add(k%100000);}
+      return s;
+    })();
     // Frontalisation : la matrice de transformation faciale (API moderne) donne la pose
     // 3D de la tête. On applique l'inverse de sa rotation au nuage de points pour ramener
     // le visage bien de face -> écartements œil/nez/bouche non écrasés par l'angle de tête,
@@ -690,6 +715,17 @@
       for(let i=0;i<N;i++){
         uv[i*2]  =clamp01(pos[i*3]/aspect + 0.5);   // u = ortho(x) -> retombe sur p.x si frontal
         uv[i*2+1]=clamp01(0.5 - pos[i*3+1]);        // v = ortho(y) -> retombe sur p.y si frontal
+      }
+      // Anti-débordement sur le fond : on rentre les UV du contour vers le centre du visage
+      // pour que les triangles de bordure échantillonnent la peau, jamais l'arrière-plan.
+      if(FACE_EDGE_ERODE>0 && FACE_BOUNDARY.size){
+        let ucx=0,ucy=0;
+        for(let i=0;i<N;i++){ucx+=uv[i*2];ucy+=uv[i*2+1];}
+        ucx/=N;ucy/=N;
+        for(const i of FACE_BOUNDARY){
+          uv[i*2]  =ucx+(uv[i*2]  -ucx)*(1-FACE_EDGE_ERODE);
+          uv[i*2+1]=ucy+(uv[i*2+1]-ucy)*(1-FACE_EDGE_ERODE);
+        }
       }
       // min/max APRÈS frontalisation (bornes de l'accessor POSITION)
       const mn=[1e9,1e9,1e9], mx=[-1e9,-1e9,-1e9];
