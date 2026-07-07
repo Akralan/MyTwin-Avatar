@@ -215,8 +215,12 @@ def replace_face(body_glb, face_glb, out_path: str, force_geometric: bool = Fals
             # wavelength_scale<1 makes the grain finer than the body (aesthetic choice):
             # 1.0 matches the body exactly, but that reads a touch coarse on the face, so
             # we bias ~30% finer. Tune here if the grain still looks too big/small.
+            # stretch_fade désactivé : on garde le grain synthétique mais on ne
+            # dé-streake plus les joues étirées (le crossfade HF qui remplaçait le
+            # détail du selfie par du grain isotrope dans les joues).
             stitched = texture_grain.add_matched_grain(stitched, body, hf,
-                                                       wavelength_scale=1.0)
+                                                       wavelength_scale=1.0,
+                                                       stretch_fade=False)
         except Exception as e:  # noqa: BLE001
             warnings.append(f"grain match skipped ({e})")
 

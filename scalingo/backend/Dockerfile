@@ -32,5 +32,7 @@ COPY models/ ./models/
 COPY corps.glb visage.glb api.py ./
 
 EXPOSE 8080
-# timeout large : /graft est synchrone (CPU).
-CMD gunicorn api:app --workers 1 --threads 8 --timeout 300 --bind 0.0.0.0:${PORT:-8080}
+# timeout large : /graft est synchrone (CPU) et prend plusieurs minutes sur un vrai
+# visage (vCPU Scaleway plus lent qu'en local). 900 s = plafond du timeout conteneur
+# Scaleway ; c'est gunicorn le maillon le plus court, donc il doit être aligné dessus.
+CMD gunicorn api:app --workers 1 --threads 8 --timeout 900 --bind 0.0.0.0:${PORT:-8080}
