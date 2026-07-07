@@ -77,7 +77,7 @@ POSE_MODE = os.environ.get("MESHY_POSE_MODE", "a-pose")
 TARGET_POLYCOUNT = int(os.environ.get("MESHY_TARGET_POLYCOUNT", "30000"))
 SHOULD_REMESH = _env_bool("MESHY_SHOULD_REMESH", False)
 ENABLE_PBR = _env_bool("MESHY_ENABLE_PBR", True)
-HD_TEXTURE = _env_bool("MESHY_HD_TEXTURE", True)
+HD_TEXTURE = _env_bool("MESHY_HD_TEXTURE", False)
 REMOTE_TIMEOUT = float(os.environ.get("REMOTE_TIMEOUT", "1200"))
 
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "12"))
