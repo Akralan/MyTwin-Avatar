@@ -314,7 +314,7 @@
     <section id="s-result" class="screen">
       <div class="card viewer-card">
         <model-viewer id="mv" camera-controls auto-rotate touch-action="pan-y"
-          shadow-intensity="1" exposure="1.05" interaction-prompt="none"
+          shadow-intensity="1" exposure="0.8" interaction-prompt="none"
           ar ar-modes="webxr scene-viewer quick-look"></model-viewer>
       </div>
       <div class="hint">Glissez pour tourner · pincez pour zoomer</div>
@@ -790,7 +790,7 @@
         const url=URL.createObjectURL(glbBlob);
         const el=document.createElement('model-viewer');
         el.style.cssText='position:fixed;left:-9999px;top:0;width:300px;height:400px;';
-        el.setAttribute('exposure','1.05'); el.setAttribute('shadow-intensity','1');
+        el.setAttribute('exposure','0.8'); el.setAttribute('shadow-intensity','1');
         el.setAttribute('interaction-prompt','none');
         let settled=false;
         const done=(fn,arg)=>{if(settled)return;settled=true;clearTimeout(to);el.remove();URL.revokeObjectURL(url);fn(arg);};
